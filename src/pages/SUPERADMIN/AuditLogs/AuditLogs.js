@@ -1,12 +1,44 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Header from "../../../components/superadmin/Header";
 import DataTable from "../../../components/superadmin/DataTable";
 import SearchFilter from "../../../components/superadmin/SearchFilter";
-import { auditLogs } from "../mockData";
+import { fetchAuditLogs } from "../superAdminApi";
 
 function AuditLogs() {
   const [search, setSearch] = useState("");
   const [module, setModule] = useState("All");
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLogs = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const logs = await fetchAuditLogs();
+        if (active) setAuditLogs(logs);
+      } catch (requestError) {
+        if (active) setError(requestError.message || "Unable to load audit logs.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadLogs();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const modules = useMemo(
+    () => ["All", ...Array.from(new Set(auditLogs.map((log) => log.module).filter(Boolean)))],
+    [auditLogs]
+  );
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -16,7 +48,7 @@ function AuditLogs() {
       const matchesModule = module === "All" || log.module === module;
       return matchesSearch && matchesModule;
     });
-  }, [search, module]);
+  }, [auditLogs, search, module]);
 
   const columns = [
     { key: "user", label: "User" },
@@ -32,14 +64,19 @@ function AuditLogs() {
         value={search}
         onChange={setSearch}
         placeholder="Search audit logs by user, action, or timestamp..."
-        filters={["All", "Clinics", "Reports", "Notifications"]}
+        filters={modules}
         selectedFilter={module}
         onFilterChange={setModule}
       />
-      <DataTable columns={columns} rows={rows} emptyMessage="No audit logs match your filters." />
+      <DataTable
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={error}
+        emptyMessage="No audit logs match your filters."
+      />
     </>
   );
 }
 
 export default AuditLogs;
-

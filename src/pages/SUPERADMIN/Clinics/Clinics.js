@@ -1,26 +1,59 @@
-import React, { useMemo, useState } from "react";
-import { Eye, Pencil, Plus } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import Header from "../../../components/superadmin/Header";
 import DataTable from "../../../components/superadmin/DataTable";
 import SearchFilter from "../../../components/superadmin/SearchFilter";
-import { clinics as clinicData } from "../mockData";
+import { deleteClinic, fetchClinics } from "../superAdminApi";
 
 function Clinics() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [selectedClinic, setSelectedClinic] = useState(null);
+  const [clinics, setClinics] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadClinics = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      setClinics(await fetchClinics());
+    } catch (requestError) {
+      setError(requestError.message || "Unable to load clinics.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadClinics();
+  }, []);
+
+  const handleDelete = async (clinic) => {
+    const confirmed = window.confirm(`Delete ${clinic.name || "this clinic"}?`);
+    if (!confirmed) return;
+
+    try {
+      await deleteClinic(clinic.id);
+      await loadClinics();
+      if (selectedClinic?.id === clinic.id) setSelectedClinic(null);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to delete clinic.");
+    }
+  };
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return clinicData.filter((clinic) => {
+    return clinics.filter((clinic) => {
       const matchesSearch = [clinic.name, clinic.address, clinic.email]
         .some((value) => String(value).toLowerCase().includes(query));
       const matchesStatus = status === "All" || clinic.status === status;
       return matchesSearch && matchesStatus;
     });
-  }, [search, status]);
+  }, [clinics, search, status]);
 
   const columns = [
     { key: "name", label: "Clinic Name", width: "minmax(140px, 1fr)" },
@@ -49,6 +82,9 @@ function Clinics() {
           <button className="sa-icon-btn" onClick={() => navigate(`/superadmin/clinics/edit/${clinic.id}`)} title="Edit clinic">
             <Pencil size={15} />
           </button>
+          <button className="sa-icon-btn" onClick={() => handleDelete(clinic)} title="Delete clinic">
+            <Trash2 size={15} />
+          </button>
         </div>
       ),
     },
@@ -76,7 +112,13 @@ function Clinics() {
         onFilterChange={setStatus}
       />
 
-      <DataTable columns={columns} rows={rows} emptyMessage="No clinics match your filters." />
+      <DataTable
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={error}
+        emptyMessage="No clinics match your filters."
+      />
 
       {selectedClinic ? (
         <div className="sa-form-card" style={{ marginTop: 16 }}>
@@ -104,4 +146,3 @@ function Clinics() {
 }
 
 export default Clinics;
-

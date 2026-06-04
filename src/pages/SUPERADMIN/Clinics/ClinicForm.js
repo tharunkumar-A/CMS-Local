@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "../../../components/superadmin/Header";
-import { clinics } from "../mockData";
+import { fetchClinic, saveClinic } from "../superAdminApi";
 
 const emptyClinic = {
   name: "",
@@ -15,23 +15,60 @@ const emptyClinic = {
 function ClinicForm({ mode }) {
   const navigate = useNavigate();
   const { id } = useParams();
-  const existingClinic = useMemo(() => clinics.find((clinic) => clinic.id === id), [id]);
-  const [form, setForm] = useState(existingClinic || emptyClinic);
+  const [form, setForm] = useState(emptyClinic);
+  const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    const loadClinic = async () => {
+      if (mode !== "edit" || !id) return;
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const clinic = await fetchClinic(id);
+        if (active) setForm({ ...emptyClinic, ...clinic });
+      } catch (requestError) {
+        if (active) setError(requestError.message || "Unable to load clinic.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadClinic();
+
+    return () => {
+      active = false;
+    };
+  }, [id, mode]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setSaving(true);
-    window.setTimeout(() => {
-      setSaving(false);
+    setError("");
+
+    try {
+      await saveClinic(form, mode === "edit" ? id : undefined);
       navigate("/superadmin/clinics");
-    }, 350);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to save clinic.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return <div className="sa-state">Loading clinic...</div>;
+  }
 
   return (
     <>
@@ -41,6 +78,8 @@ function ClinicForm({ mode }) {
       />
 
       <form className="sa-form-card" onSubmit={handleSubmit}>
+        {error ? <div className="sa-state sa-state--error">{error}</div> : null}
+
         <div className="sa-form-grid">
           <div className="sa-form-field">
             <label>Clinic Name</label>
@@ -82,4 +121,3 @@ function ClinicForm({ mode }) {
 }
 
 export default ClinicForm;
-

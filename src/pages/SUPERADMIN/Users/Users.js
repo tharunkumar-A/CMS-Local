@@ -1,15 +1,108 @@
-import React, { useMemo, useState } from "react";
-import { Eye, ToggleLeft, ToggleRight } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Eye, Pencil, Plus, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
 import Header from "../../../components/superadmin/Header";
 import DataTable from "../../../components/superadmin/DataTable";
 import SearchFilter from "../../../components/superadmin/SearchFilter";
-import { users as userData } from "../mockData";
+import {
+  deleteUser,
+  fetchUser,
+  fetchUsers,
+  saveUser,
+  updateUserStatus,
+} from "../superAdminApi";
+
+const emptyUser = {
+  name: "",
+  email: "",
+  clinic: "",
+  type: "Patient",
+  status: "Active",
+  phone: "",
+};
 
 function Users() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
-  const [users, setUsers] = useState(userData);
+  const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingUserId, setEditingUserId] = useState("");
+  const [form, setForm] = useState(emptyUser);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadUsers = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      setUsers(await fetchUsers());
+    } catch (requestError) {
+      setError(requestError.message || "Unable to load users.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const openCreateForm = () => {
+    setEditingUserId("");
+    setSelectedUser(null);
+    setForm(emptyUser);
+    setShowForm(true);
+    setError("");
+  };
+
+  const openEditForm = async (user) => {
+    setEditingUserId(user.id);
+    setSelectedUser(null);
+    setForm({ ...emptyUser, ...user });
+    setShowForm(true);
+    setError("");
+
+    try {
+      setForm({ ...emptyUser, ...(await fetchUser(user.id)) });
+    } catch {
+      setForm({ ...emptyUser, ...user });
+    }
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingUserId("");
+    setForm(emptyUser);
+  };
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!form.name.trim() || !form.email.trim()) {
+      setError("Name and email are required.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      await saveUser(form, editingUserId || undefined);
+      closeForm();
+      await loadUsers();
+    } catch (requestError) {
+      setError(requestError.message || "Unable to save user.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -21,14 +114,35 @@ function Users() {
     });
   }, [search, status, users]);
 
-  const toggleStatus = (userId) => {
-    setUsers((current) =>
-      current.map((user) =>
-        user.id === userId
-          ? { ...user, status: user.status === "Active" ? "Inactive" : "Active" }
-          : user
-      )
-    );
+  const toggleStatus = async (user) => {
+    const nextStatus = user.status === "Active" ? "Inactive" : "Active";
+    setError("");
+
+    try {
+      await updateUserStatus(user.id, nextStatus);
+      await loadUsers();
+      if (selectedUser?.id === user.id) {
+        setSelectedUser((current) => current ? { ...current, status: nextStatus } : current);
+      }
+    } catch (requestError) {
+      setError(requestError.message || "Unable to update user status.");
+    }
+  };
+
+  const handleDelete = async (user) => {
+    const confirmed = window.confirm(`Delete ${user.name || "this user"}?`);
+    if (!confirmed) return;
+
+    setError("");
+
+    try {
+      await deleteUser(user.id);
+      if (selectedUser?.id === user.id) setSelectedUser(null);
+      if (editingUserId === user.id) closeForm();
+      await loadUsers();
+    } catch (requestError) {
+      setError(requestError.message || "Unable to delete user.");
+    }
   };
 
   const columns = [
@@ -56,8 +170,14 @@ function Users() {
           <button className="sa-icon-btn" onClick={() => setSelectedUser(user)} title="User details">
             <Eye size={15} />
           </button>
-          <button className="sa-icon-btn" onClick={() => toggleStatus(user.id)} title="Activate or deactivate user">
+          <button className="sa-icon-btn" onClick={() => openEditForm(user)} title="Edit user">
+            <Pencil size={15} />
+          </button>
+          <button className="sa-icon-btn" onClick={() => toggleStatus(user)} title="Activate or deactivate user">
             {user.status === "Active" ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+          </button>
+          <button className="sa-icon-btn" onClick={() => handleDelete(user)} title="Delete user">
+            <Trash2 size={15} />
           </button>
         </div>
       ),
@@ -66,7 +186,16 @@ function Users() {
 
   return (
     <>
-      <Header title="User Management" subtitle="Search, filter, view, activate, and deactivate users." />
+      <Header
+        title="User Management"
+        subtitle="Search, filter, view, activate, and deactivate users."
+        action={
+          <button className="sa-btn sa-btn-primary" onClick={openCreateForm}>
+            <Plus size={16} />
+            Create User
+          </button>
+        }
+      />
 
       <SearchFilter
         value={search}
@@ -77,7 +206,61 @@ function Users() {
         onFilterChange={setStatus}
       />
 
-      <DataTable columns={columns} rows={rows} emptyMessage="No users match your filters." />
+      {showForm ? (
+        <form className="sa-form-card" style={{ marginBottom: 16 }} onSubmit={handleSubmit}>
+          <h3>{editingUserId ? "Edit User" : "Create User"}</h3>
+          {error ? <div className="sa-state sa-state--error">{error}</div> : null}
+          <div className="sa-form-grid">
+            <div className="sa-form-field">
+              <label>Name</label>
+              <input name="name" value={form.name} onChange={handleChange} required />
+            </div>
+            <div className="sa-form-field">
+              <label>Email</label>
+              <input type="email" name="email" value={form.email} onChange={handleChange} required />
+            </div>
+            <div className="sa-form-field">
+              <label>Clinic</label>
+              <input name="clinic" value={form.clinic} onChange={handleChange} />
+            </div>
+            <div className="sa-form-field">
+              <label>Type</label>
+              <select name="type" value={form.type} onChange={handleChange}>
+                <option>Patient</option>
+                <option>Doctor</option>
+                <option>Clinic Admin</option>
+                <option>Receptionist</option>
+                <option>Staff</option>
+              </select>
+            </div>
+            <div className="sa-form-field">
+              <label>Status</label>
+              <select name="status" value={form.status} onChange={handleChange}>
+                <option>Active</option>
+                <option>Inactive</option>
+              </select>
+            </div>
+            <div className="sa-form-field">
+              <label>Phone</label>
+              <input name="phone" value={form.phone} onChange={handleChange} />
+            </div>
+          </div>
+          <div className="sa-page-actions" style={{ marginTop: 14 }}>
+            <button type="button" className="sa-btn" onClick={closeForm}>Close</button>
+            <button className="sa-btn sa-btn-primary" disabled={saving}>
+              {saving ? "Saving..." : "Save User"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      <DataTable
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={!showForm ? error : ""}
+        emptyMessage="No users match your filters."
+      />
 
       {selectedUser ? (
         <div className="sa-form-card" style={{ marginTop: 16 }}>
@@ -87,10 +270,10 @@ function Users() {
             action={<button className="sa-btn" onClick={() => setSelectedUser(null)}>Close</button>}
           />
           <div className="sa-form-grid">
-            {["name", "email", "clinic", "type", "status", "lastActive"].map((key) => (
+            {["name", "email", "clinic", "type", "status", "phone", "lastActive"].map((key) => (
               <div className="sa-form-field" key={key}>
                 <label>{key.replace(/^\w/, (letter) => letter.toUpperCase())}</label>
-                <input value={selectedUser[key]} readOnly />
+                <input value={selectedUser[key] || ""} readOnly />
               </div>
             ))}
           </div>
@@ -101,4 +284,3 @@ function Users() {
 }
 
 export default Users;
-

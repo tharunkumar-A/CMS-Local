@@ -3,7 +3,7 @@ import { Building2, IndianRupee, ShieldCheck, UserCheck, Users } from "lucide-re
 import Header from "../../../components/superadmin/Header";
 import DashboardCards from "../../../components/superadmin/DashboardCards";
 import Charts from "../../../components/superadmin/Charts";
-import { activities, admins, clinics, revenueData, users } from "../mockData";
+import { fetchDashboardData, getDashboardMetric } from "../superAdminApi";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-IN", {
@@ -14,24 +14,80 @@ const formatCurrency = (value) =>
 
 function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [dashboard, setDashboard] = useState({});
+  const [summary, setSummary] = useState({});
+  const [revenueData, setRevenueData] = useState([]);
+  const [activities, setActivities] = useState([]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 250);
-    return () => window.clearTimeout(timer);
+    let active = true;
+
+    const loadDashboard = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await fetchDashboardData();
+        if (!active) return;
+
+        setDashboard(data.dashboard);
+        setSummary(data.summary);
+        setRevenueData(data.revenueData);
+        setActivities(data.activities);
+        setError(data.error);
+      } catch (requestError) {
+        if (active) {
+          setError(requestError.message || "Unable to load dashboard.");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadDashboard();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const cards = useMemo(() => {
-    const totalRevenue = clinics.reduce((sum, clinic) => sum + clinic.revenue, 0);
-    const activeUsers = users.filter((user) => user.status === "Active").length;
+    const metrics = { ...dashboard, ...summary };
 
     return [
-      { label: "Total Clinics", value: clinics.length, icon: Building2, tone: "teal" },
-      { label: "Total Admins", value: admins.length, icon: ShieldCheck, tone: "blue" },
-      { label: "Total Users", value: users.length, icon: Users, tone: "amber" },
-      { label: "Active Users", value: activeUsers, icon: UserCheck, tone: "green" },
-      { label: "Revenue Summary", value: formatCurrency(totalRevenue), icon: IndianRupee, tone: "teal" },
+      {
+        label: "Total Clinics",
+        value: getDashboardMetric(metrics, ["totalClinics", "clinics", "clinicCount"]),
+        icon: Building2,
+        tone: "teal",
+      },
+      {
+        label: "Total Admins",
+        value: getDashboardMetric(metrics, ["totalAdmins", "admins", "adminCount"]),
+        icon: ShieldCheck,
+        tone: "blue",
+      },
+      {
+        label: "Total Users",
+        value: getDashboardMetric(metrics, ["totalUsers", "users", "userCount"]),
+        icon: Users,
+        tone: "amber",
+      },
+      {
+        label: "Active Users",
+        value: getDashboardMetric(metrics, ["activeUsers", "activeUserCount"]),
+        icon: UserCheck,
+        tone: "green",
+      },
+      {
+        label: "Revenue Summary",
+        value: formatCurrency(getDashboardMetric(metrics, ["totalRevenue", "revenue", "revenueSummary"])),
+        icon: IndianRupee,
+        tone: "teal",
+      },
     ];
-  }, []);
+  }, [dashboard, summary]);
 
   if (loading) {
     return <div className="sa-state">Loading Super Admin dashboard...</div>;
@@ -43,6 +99,8 @@ function Dashboard() {
         title="Super Admin Dashboard"
         subtitle="Platform-wide clinics, users, revenue, and operational activity."
       />
+
+      {error ? <div className="sa-state sa-state--error">{error}</div> : null}
 
       <DashboardCards cards={cards} />
 
@@ -57,7 +115,7 @@ function Dashboard() {
           <h3>Recent Activities</h3>
           <p>Latest platform events.</p>
           <div className="sa-activity-list">
-            {activities.map((activity) => (
+            {activities.length ? activities.map((activity) => (
               <div className="sa-activity-item" key={activity.id}>
                 <div>
                   <b>{activity.title}</b>
@@ -65,7 +123,7 @@ function Dashboard() {
                 </div>
                 <span>{activity.time}</span>
               </div>
-            ))}
+            )) : <div className="sa-state">No recent activities available.</div>}
           </div>
         </div>
       </div>
@@ -74,4 +132,3 @@ function Dashboard() {
 }
 
 export default Dashboard;
-
