@@ -15,7 +15,6 @@ import SuperAdminSettings from "./pages/SUPERADMIN/Settings/Settings";
 import SuperAdminReports from "./pages/SUPERADMIN/Reports/Reports";
 import SuperAdminAuditLogs from "./pages/SUPERADMIN/AuditLogs/AuditLogs";
 import SuperAdminNotifications from "./pages/SUPERADMIN/Notifications/Notifications";
-import SuperAdminProfile from "./pages/SUPERADMIN/Profile/Profile";
 
 // Pages
 import AdminLogin from "./Login/Adminlogin";
@@ -102,7 +101,6 @@ function App() {
           <Route path="superadmin/reports" element={<SuperAdminReports />} />
           <Route path="superadmin/audit-logs" element={<SuperAdminAuditLogs />} />
           <Route path="superadmin/notifications" element={<SuperAdminNotifications />} />
-          <Route path="superadmin/profile" element={<SuperAdminProfile />} />
 
 
 

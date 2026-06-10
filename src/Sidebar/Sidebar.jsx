@@ -97,6 +97,7 @@ import {
 
 import "./Sidebar.css";
 import { getInitials, getRoleProfile } from "../profile/sessionProfile";
+import { getClinicDisplayName } from "../utils/clinicDisplay";
 
 const items = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -127,7 +128,7 @@ function Sidebar() {
   const navItems = isSuperAdmin ? superAdminItems : items;
   const profile = getRoleProfile("admin");
   const profileName = profile.name;
-  const profileSub = isSuperAdmin ? "Super Admin" : profile.roleLabel;
+  const profileSub = isSuperAdmin ? "Super Admin" : getClinicDisplayName(profile, "Admin");
 
   return (
     <aside className="sidebar">

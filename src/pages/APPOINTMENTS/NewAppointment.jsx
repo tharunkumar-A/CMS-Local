@@ -82,7 +82,7 @@ function NewAppointment() {
     };
 
     saveAppointments([newAppointment, ...existingAppointments]);
-    toast.success("Appointment created successfully");
+    toast.success("Appointment booked successfully");
     navigate("/appointments");
   };
 

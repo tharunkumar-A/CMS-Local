@@ -2,13 +2,13 @@ import { apiUrl } from "../../config/api";
 
 export const SUPER_ADMIN_API = {
   dashboard: "SuperAdmin/dashboard",
-  createClinicAdmin: "SuperAdmin/create-clinic-admin",
+  createClinicAdmin: "AdminManagement",
   superAdminClinics: "SuperAdmin/clinics",
-  admins: "SuperAdmin/admins",
-  clinics: "clinics",
+  admins: "AdminManagement",
+  clinics: "Clinic",
   notifications: "notifications",
-  auditLogs: "logs/audit",
-  loginHistory: "logs/login-history",
+  auditLogs: "AuditLogs",
+  loginHistory: "AuditLogs/login-history",
   dashboardSummary: "dashboard/summary",
   revenueOverview: "dashboard/revenue-overview",
   activities: "dashboard/activities",
@@ -18,7 +18,9 @@ export const SUPER_ADMIN_API = {
   reportsRevenue: "reports/revenue",
   reportsActivity: "reports/activity",
   revenue: "revenue",
-  roles: "roles",
+  billing: "Billing",
+  roleNames: "Roles/roles",
+  roles: "Roles",
   users: "users",
   settings: "settings",
   settingsGeneral: "settings/general",
@@ -60,11 +62,15 @@ const asArray = (value) => {
     "records",
     "clinics",
     "admins",
+    "adminManagement",
+    "adminManagements",
     "notifications",
     "logs",
+    "auditLogs",
     "activities",
     "reports",
     "users",
+    "roles",
   ];
 
   for (const key of collectionKeys) {
@@ -73,6 +79,9 @@ const asArray = (value) => {
 
   return [];
 };
+
+const hasValue = (value) =>
+  value !== undefined && value !== null && String(value).trim() !== "";
 
 const asObject = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -96,6 +105,9 @@ const pick = (source, keys, fallback = "") => {
 
   return fallback;
 };
+
+const valuesEqual = (left, right) =>
+  hasValue(left) && hasValue(right) && String(left) === String(right);
 
 const toNumber = (value) => {
   const number = Number(value);
@@ -184,11 +196,13 @@ export const normalizeClinic = (clinic = {}) => ({
 });
 
 export const normalizeAdmin = (admin = {}) => ({
-  id: pick(admin, ["id", "adminId", "userId", "_id"]),
-  name: pick(admin, ["name", "fullName", "adminName", "userName"]),
-  email: pick(admin, ["email", "emailAddress"]),
-  assignedClinic: pick(admin, ["assignedClinic", "clinicName", "clinic", "clinicId"]),
-  role: pick(admin, ["role", "roleName"], "Clinic Admin"),
+  id: pick(admin, ["id", "adminId", "adminID", "userId", "_id"]),
+  name: pick(admin, ["name", "fullName", "adminName", "AdminName", "userName"]),
+  email: pick(admin, ["email", "emailAddress", "adminEmail", "AdminEmail"]),
+  phone: pick(admin, ["phone", "phoneNumber", "mobile", "mobileNumber", "MobileNumber", "adminMobileNumber", "AdminMobileNumber"]),
+  assignedClinic: pick(admin, ["assignedClinic", "clinicName", "ClinicName", "hospitalName", "HospitalName", "clinic"]),
+  assignedClinicId: pick(admin, ["clinicId", "hospitalId", "assignedClinicId", "ClinicId", "HospitalId"]),
+  role: "Admin",
   status: normalizeStatus(pick(admin, ["status", "isActive", "active"], "Active")),
   raw: admin,
 });
@@ -235,10 +249,134 @@ export const normalizeNotification = (notification = {}) => ({
 export const normalizeReportRow = (row = {}, index = 0) => ({
   id: pick(row, ["id", "clinicId", "_id"], index),
   name: pick(row, ["name", "clinic", "clinicName", "label"], `Report ${index + 1}`),
+  adminName: pick(row, ["adminName", "admin", "createdBy", "userName"], ""),
+  adminEmail: pick(row, ["adminEmail", "email", "createdByEmail"], ""),
   revenue: toNumber(pick(row, ["revenue", "totalRevenue", "amount"], 0)),
   users: toNumber(pick(row, ["users", "userCount", "activity", "totalUsers"], 0)),
+  invoiceCount: toNumber(pick(row, ["invoiceCount", "invoices", "billingCount"], 0)),
   status: normalizeStatus(pick(row, ["status", "isActive", "active"], "Active")),
 });
+
+const getBillingAmount = (item = {}) =>
+  toNumber(
+    pick(
+      item,
+      [
+        "totalAmount",
+        "grandTotal",
+        "total",
+        "amount",
+        "paidAmount",
+        "paymentAmount",
+        "revenue",
+        "consultationCharge",
+      ],
+      0
+    )
+  );
+
+const getBillingDate = (item = {}) =>
+  pick(item, ["createdAt", "paidAt", "paymentDate", "invoiceDate", "date", "appointmentDate"], "");
+
+const getMonthLabel = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+};
+
+const getBillingClinicId = (item = {}) =>
+  String(pick(item, ["clinicId", "hospitalId", "assignedClinicId", "clinicID", "hospitalID"], ""));
+
+const getBillingClinicName = (item = {}) =>
+  pick(item, ["clinicName", "hospitalName", "clinic", "assignedClinic"], "");
+
+const getBillingAdminKey = (item = {}) =>
+  String(
+    pick(item, ["adminId", "createdById", "userId", "createdBy", "adminEmail", "createdByEmail"], "")
+  );
+
+const buildRevenueChart = (billingRows = []) => {
+  const byMonth = new Map();
+
+  billingRows.forEach((item) => {
+    const month = getMonthLabel(getBillingDate(item));
+    const current = byMonth.get(month) || { name: month, revenue: 0, users: 0 };
+    current.revenue += getBillingAmount(item);
+    current.users += 1;
+    byMonth.set(month, current);
+  });
+
+  return Array.from(byMonth.values());
+};
+
+const buildAdminRevenueRows = ({ billingRows = [], clinicRows = [], adminRows = [] }) => {
+  const clinics = clinicRows.map(normalizeClinic);
+  const admins = adminRows.map(normalizeAdmin);
+  const clinicById = new Map(clinics.map((clinic) => [String(clinic.id), clinic]));
+  const clinicByName = new Map(clinics.map((clinic) => [String(clinic.name).toLowerCase(), clinic]));
+  const adminByClinicId = new Map();
+  const adminByClinicName = new Map();
+
+  admins.forEach((admin) => {
+    const clinicId = pick(admin.raw, ["clinicId", "hospitalId", "assignedClinicId"], "");
+    if (clinicId) adminByClinicId.set(String(clinicId), admin);
+    if (admin.assignedClinic) {
+      adminByClinicName.set(String(admin.assignedClinic).toLowerCase(), admin);
+    }
+  });
+
+  const rows = new Map();
+
+  billingRows.forEach((item, index) => {
+    const clinicId = getBillingClinicId(item);
+    const rawClinicName = getBillingClinicName(item);
+    const clinic =
+      (clinicId && clinicById.get(String(clinicId))) ||
+      (rawClinicName && clinicByName.get(String(rawClinicName).toLowerCase())) ||
+      {};
+    const clinicName = clinic.name || rawClinicName || "Unassigned Clinic";
+    const admin =
+      (clinicId && adminByClinicId.get(String(clinicId))) ||
+      adminByClinicName.get(String(clinicName).toLowerCase()) ||
+      {};
+    const directAdminName = pick(item, ["adminName", "createdBy", "userName"], "");
+    const directAdminEmail = pick(item, ["adminEmail", "createdByEmail", "email"], "");
+    const key = getBillingAdminKey(item) || admin.id || `${clinicName}-${directAdminName || index}`;
+    const current =
+      rows.get(key) || {
+        id: key,
+        name: clinicName,
+        adminName: admin.name || directAdminName || "Admin",
+        adminEmail: admin.email || directAdminEmail || "",
+        revenue: 0,
+        users: 0,
+        invoiceCount: 0,
+        status: clinic.status || "Active",
+      };
+
+    current.revenue += getBillingAmount(item);
+    current.invoiceCount += 1;
+    current.users = Math.max(current.users, toNumber(pick(clinic, ["users"], 0)));
+    rows.set(key, current);
+  });
+
+  if (!rows.size) {
+    admins.forEach((admin) => {
+      rows.set(admin.id || admin.email, {
+        id: admin.id || admin.email,
+        name: admin.assignedClinic || "Unassigned Clinic",
+        adminName: admin.name || "Admin",
+        adminEmail: admin.email || "",
+        revenue: 0,
+        users: 0,
+        invoiceCount: 0,
+        status: admin.status || "Active",
+      });
+    });
+  }
+
+  return Array.from(rows.values());
+};
 
 export const normalizeRole = (role = {}, index = 0) => {
   const permissions = pick(role, ["permissions", "permissionNames", "claims"], []);
@@ -322,14 +460,191 @@ export const saveClinic = async (clinic, id) =>
 export const deleteClinic = async (id) =>
   superAdminRequest(`${SUPER_ADMIN_API.clinics}/${id}`, { method: "DELETE" });
 
+export const updateClinicStatus = async (id, status) =>
+  superAdminRequest(`${SUPER_ADMIN_API.clinics}/${id}/status`, {
+    method: "PATCH",
+    body: { status },
+  });
+
 export const fetchAdmins = async () =>
   asArray(await superAdminRequest(SUPER_ADMIN_API.admins)).map(normalizeAdmin);
+
+export const fetchAdmin = async (id) =>
+  normalizeAdmin(await superAdminRequest(`${SUPER_ADMIN_API.admins}/${id}`));
 
 export const createClinicAdmin = async (admin) =>
   superAdminRequest(SUPER_ADMIN_API.createClinicAdmin, {
     method: "POST",
     body: admin,
   });
+
+export const saveAdmin = async (admin, id) =>
+  superAdminRequest(id ? `${SUPER_ADMIN_API.admins}/${id}` : SUPER_ADMIN_API.admins, {
+    method: id ? "PUT" : "POST",
+    body: admin,
+  });
+
+const getEntityId = (item = {}) =>
+  pick(item, ["id", "doctorId", "receptionistId", "userId", "_id"], "");
+
+const getEntityClinicId = (item = {}) =>
+  pick(item, ["clinicId", "hospitalId", "assignedClinicId", "ClinicId", "HospitalId"], "");
+
+const getEntityClinicName = (item = {}) =>
+  pick(item, ["clinicName", "hospitalName", "assignedClinic", "clinic", "ClinicName"], "");
+
+const isAdminOwnedStaff = (item = {}, admin = {}) => {
+  const adminId = pick(admin.raw || admin, ["id", "adminId", "userId", "_id"], admin.id);
+  const adminEmail = pick(admin.raw || admin, ["email", "adminEmail", "AdminEmail"], admin.email);
+  const adminName = pick(admin.raw || admin, ["name", "adminName", "AdminName", "fullName"], admin.name);
+  const ownerId = pick(item, ["adminId", "createdById", "userId", "AdminId"], "");
+  const ownerEmail = pick(item, ["adminEmail", "createdByEmail", "AdminEmail"], "");
+  const ownerName = pick(item, ["adminName", "createdBy", "userName", "AdminName"], "");
+
+  return (
+    valuesEqual(ownerId, adminId) ||
+    valuesEqual(ownerEmail, adminEmail) ||
+    valuesEqual(ownerName, adminName)
+  );
+};
+
+const isStaffInClinic = (item = {}, clinicId, clinicName) =>
+  valuesEqual(getEntityClinicId(item), clinicId) ||
+  valuesEqual(String(getEntityClinicName(item)).toLowerCase(), String(clinicName || "").toLowerCase());
+
+const getAdminOwnerFields = (admin = {}) => ({
+  adminId: pick(admin.raw || admin, ["id", "adminId", "userId", "_id"], admin.id),
+  adminEmail: pick(admin.raw || admin, ["email", "adminEmail", "AdminEmail"], admin.email),
+  adminName: pick(admin.raw || admin, ["name", "adminName", "AdminName", "fullName"], admin.name),
+});
+
+const buildDoctorClinicUpdateBody = (doctor = {}, clinicId, clinicName, admin = {}) => {
+  const body = new FormData();
+  const owner = getAdminOwnerFields(admin);
+  const fields = {
+    Name: pick(doctor, ["name", "Name"], ""),
+    Specialization: pick(doctor, ["specialization", "Specialization"], ""),
+    Experience: pick(doctor, ["experience", "Experience"], 0),
+    Fees: pick(doctor, ["fees", "Fees"], 0),
+    Email: pick(doctor, ["email", "Email"], ""),
+    Phone: pick(doctor, ["phone", "Phone"], ""),
+    Password: "",
+    IsActive:
+      typeof doctor.isActive === "boolean"
+        ? String(doctor.isActive)
+        : String(pick(doctor, ["isActive", "status"], "true")).toLowerCase() !== "inactive",
+    HospitalId: clinicId,
+    ClinicId: clinicId,
+    HospitalName: clinicName,
+    ClinicName: clinicName,
+    AdminId: owner.adminId,
+    AdminEmail: owner.adminEmail,
+    AdminName: owner.adminName,
+  };
+
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) body.append(key, String(value));
+  });
+
+  return body;
+};
+
+const buildReceptionistClinicUpdateBody = (receptionist = {}, clinicId, clinicName, admin = {}) => {
+  const owner = getAdminOwnerFields(admin);
+
+  return {
+    ...receptionist,
+    password: "",
+    hospitalId: clinicId,
+    clinicId,
+    assignedClinicId: clinicId,
+    hospitalName: clinicName,
+    clinicName,
+    assignedClinic: clinicName,
+    adminId: owner.adminId,
+    adminEmail: owner.adminEmail,
+    adminName: owner.adminName,
+  };
+};
+
+const updateStaffClinic = async ({ path, item, admin, clinicId, clinicName, buildBody }) => {
+  const id = getEntityId(item);
+  if (!id) return false;
+
+  const body = buildBody(item, clinicId, clinicName, admin);
+  const response = await fetch(apiUrl(`${path}/${id}`), {
+    method: "PUT",
+    headers:
+      body instanceof FormData
+        ? { "ngrok-skip-browser-warning": "true" }
+        : {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
+    body: body instanceof FormData ? body : JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to update ${path.toLowerCase()} ${id}.`);
+  }
+
+  return true;
+};
+
+export const syncAdminStaffClinic = async ({
+  admin,
+  previousClinicId,
+  previousClinicName,
+  clinicId,
+  clinicName,
+}) => {
+  if (!hasValue(clinicId)) {
+    return { updated: 0 };
+  }
+
+  const [doctorsResult, receptionistsResult] = await Promise.allSettled([
+    superAdminRequest("Doctor"),
+    superAdminRequest("Receptionist"),
+  ]);
+  const staffGroups = [
+    {
+      path: "Doctor",
+      rows: doctorsResult.status === "fulfilled" ? asArray(doctorsResult.value) : [],
+      buildBody: buildDoctorClinicUpdateBody,
+    },
+    {
+      path: "Receptionist",
+      rows: receptionistsResult.status === "fulfilled" ? asArray(receptionistsResult.value) : [],
+      buildBody: buildReceptionistClinicUpdateBody,
+    },
+  ];
+  const updates = [];
+
+  staffGroups.forEach(({ path, rows, buildBody }) => {
+    const ownedRows = rows.filter((item) => isAdminOwnedStaff(item, admin));
+    const targetRows = ownedRows.length
+      ? ownedRows
+      : rows.filter((item) => isStaffInClinic(item, previousClinicId, previousClinicName));
+
+    targetRows.forEach((item) => {
+      if (!isStaffInClinic(item, clinicId, clinicName)) {
+        updates.push(updateStaffClinic({ path, item, admin, clinicId, clinicName, buildBody }));
+      }
+    });
+  });
+
+  const results = await Promise.allSettled(updates);
+  const failed = results.filter((result) => result.status === "rejected");
+
+  if (failed.length) {
+    throw new Error(failed[0].reason?.message || "Admin updated, but staff clinic sync failed.");
+  }
+
+  return { updated: results.length };
+};
+
+export const deleteAdmin = async (id) =>
+  superAdminRequest(`${SUPER_ADMIN_API.admins}/${id}`, { method: "DELETE" });
 
 export const fetchNotifications = async () => {
   const localNotifications = readLocalList(LOCAL_NOTIFICATIONS_KEY).map(normalizeNotification);
@@ -373,6 +688,18 @@ export const recordAuditLog = (log) =>
     ...log,
   });
 
+export const createAuditLog = async (log) =>
+  superAdminRequest(SUPER_ADMIN_API.auditLogs, {
+    method: "POST",
+    body: log,
+  });
+
+export const fetchAuditLog = async (id) =>
+  normalizeAuditLog(await superAdminRequest(`${SUPER_ADMIN_API.auditLogs}/${id}`));
+
+export const deleteAuditLog = async (id) =>
+  superAdminRequest(`${SUPER_ADMIN_API.auditLogs}/${id}`, { method: "DELETE" });
+
 export const createNotificationRemote = async (notification) =>
   superAdminRequest(SUPER_ADMIN_API.notifications, {
     method: "POST",
@@ -406,6 +733,11 @@ export const fetchAuditLogs = async () => {
 export const fetchRoles = async () =>
   asArray(await superAdminRequest(SUPER_ADMIN_API.roles)).map(normalizeRole);
 
+export const fetchRoleNames = async () =>
+  asArray(await superAdminRequest(SUPER_ADMIN_API.roleNames)).map((role, index) =>
+    typeof role === "string" ? role : normalizeRole(role, index).name
+  );
+
 export const fetchRole = async (id) =>
   normalizeRole(await superAdminRequest(`${SUPER_ADMIN_API.roles}/${id}`));
 
@@ -419,7 +751,7 @@ export const deleteRole = async (id) =>
   superAdminRequest(`${SUPER_ADMIN_API.roles}/${id}`, { method: "DELETE" });
 
 export const updateRolePermissions = async (id, permissions) =>
-  superAdminRequest(`${SUPER_ADMIN_API.roles}/${id}/permissions`, {
+  superAdminRequest(`${SUPER_ADMIN_API.roles}/${id}`, {
     method: "PUT",
     body: { permissions },
   });
@@ -473,48 +805,72 @@ export const updatePaymentSettings = async (settings) =>
   });
 
 export const fetchDashboardData = async () => {
-  const [dashboard, summary, revenueOverview, activities] = await Promise.allSettled([
+  const [dashboard, summary, revenueOverview, activities, billing] = await Promise.allSettled([
     superAdminRequest(SUPER_ADMIN_API.dashboard),
     superAdminRequest(SUPER_ADMIN_API.dashboardSummary),
     superAdminRequest(SUPER_ADMIN_API.revenueOverview),
     superAdminRequest(SUPER_ADMIN_API.activities),
+    superAdminRequest(SUPER_ADMIN_API.billing),
   ]);
 
   const dashboardData = dashboard.status === "fulfilled" ? asObject(dashboard.value) : {};
   const summaryData = summary.status === "fulfilled" ? asObject(summary.value) : {};
   const revenueData = revenueOverview.status === "fulfilled" ? revenueOverview.value : [];
   const activityData = activities.status === "fulfilled" ? activities.value : [];
+  const billingRows = billing.status === "fulfilled" ? asArray(billing.value) : [];
+  const totalRevenue = billingRows.reduce((sum, item) => sum + getBillingAmount(item), 0);
+  const nextSummary = {
+    ...summaryData,
+    totalRevenue: getDashboardMetric({ ...dashboardData, ...summaryData }, ["totalRevenue", "revenue", "revenueSummary"]) || totalRevenue,
+  };
 
   return {
     dashboard: dashboardData,
-    summary: summaryData,
-    revenueData: asArray(revenueData).map(normalizeRevenuePoint),
+    summary: nextSummary,
+    revenueData: asArray(revenueData).length
+      ? asArray(revenueData).map(normalizeRevenuePoint)
+      : buildRevenueChart(billingRows),
     activities: asArray(activityData).map(normalizeActivity),
     error:
       dashboard.status === "rejected" &&
       summary.status === "rejected" &&
       revenueOverview.status === "rejected" &&
-      activities.status === "rejected"
+      activities.status === "rejected" &&
+      billing.status === "rejected"
         ? dashboard.reason.message
         : "",
   };
 };
 
 export const fetchReports = async () => {
-  const [revenue, activity] = await Promise.allSettled([
+  const [revenue, activity, billing, clinics, admins] = await Promise.allSettled([
     superAdminRequest(SUPER_ADMIN_API.reportsRevenue),
     superAdminRequest(SUPER_ADMIN_API.reportsActivity),
+    superAdminRequest(SUPER_ADMIN_API.billing),
+    superAdminRequest(SUPER_ADMIN_API.clinics),
+    superAdminRequest(SUPER_ADMIN_API.admins),
   ]);
 
   const revenueRows = revenue.status === "fulfilled" ? asArray(revenue.value) : [];
   const activityRows = activity.status === "fulfilled" ? asArray(activity.value) : [];
-  const rows = revenueRows.length ? revenueRows : activityRows;
+  const billingRows = billing.status === "fulfilled" ? asArray(billing.value) : [];
+  const clinicRows = clinics.status === "fulfilled" ? asArray(clinics.value) : [];
+  const adminRows = admins.status === "fulfilled" ? asArray(admins.value) : [];
+  const rows = revenueRows.length
+    ? revenueRows.map(normalizeReportRow)
+    : buildAdminRevenueRows({ billingRows, clinicRows, adminRows });
 
   return {
-    rows: rows.map(normalizeReportRow),
-    chartData: revenueRows.map(normalizeRevenuePoint),
+    rows,
+    chartData: revenueRows.length
+      ? revenueRows.map(normalizeRevenuePoint)
+      : buildRevenueChart(billingRows),
     error:
-      revenue.status === "rejected" && activity.status === "rejected"
+      revenue.status === "rejected" &&
+      activity.status === "rejected" &&
+      billing.status === "rejected" &&
+      clinics.status === "rejected" &&
+      admins.status === "rejected"
         ? revenue.reason.message
         : "",
   };

@@ -55,13 +55,15 @@ function Reports() {
   }, []);
 
   const columns = [
+    { key: "adminName", label: "Admin" },
     { key: "name", label: "Clinic" },
     {
       key: "revenue",
-      label: "Revenue Report",
+      label: "Total Revenue",
       render: (clinic) => `Rs. ${clinic.revenue.toLocaleString("en-IN")}`,
     },
-    { key: "users", label: "User Activity" },
+    { key: "invoiceCount", label: "Invoices" },
+    { key: "users", label: "Users" },
     {
       key: "performance",
       label: "Clinic Performance",
@@ -78,7 +80,7 @@ function Reports() {
     const query = search.trim().toLowerCase();
 
     return rows.filter((row) => {
-      const matchesSearch = [row.name, row.revenue, row.users, row.status]
+      const matchesSearch = [row.adminName, row.adminEmail, row.name, row.revenue, row.users, row.status]
         .some((value) => String(value).toLowerCase().includes(query));
       const matchesStatus = status === "All" || row.status === status;
       return matchesSearch && matchesStatus;
@@ -86,10 +88,13 @@ function Reports() {
   }, [rows, search, status]);
 
   const exportCsv = () => {
-    const header = ["Clinic", "Revenue", "Users", "Status", "Performance"];
+    const header = ["Admin", "Admin Email", "Clinic", "Revenue", "Invoices", "Users", "Status", "Performance"];
     const body = filteredRows.map((row) => [
+      row.adminName,
+      row.adminEmail,
       row.name,
       row.revenue,
+      row.invoiceCount,
       row.users,
       row.status,
       row.status === "Active" ? "Healthy" : "Needs Review",
@@ -101,8 +106,11 @@ function Reports() {
   const exportPdf = () => {
     const rowsHtml = filteredRows.map((row) => `
       <tr>
+        <td>${row.adminName || "-"}</td>
+        <td>${row.adminEmail || "-"}</td>
         <td>${row.name || "-"}</td>
         <td>Rs. ${Number(row.revenue || 0).toLocaleString("en-IN")}</td>
+        <td>${row.invoiceCount || 0}</td>
         <td>${row.users || 0}</td>
         <td>${row.status || "-"}</td>
         <td>${row.status === "Active" ? "Healthy" : "Needs Review"}</td>
@@ -130,14 +138,17 @@ function Reports() {
           <table>
             <thead>
               <tr>
+                <th>Admin</th>
+                <th>Email</th>
                 <th>Clinic</th>
                 <th>Revenue</th>
+                <th>Invoices</th>
                 <th>Users</th>
                 <th>Status</th>
                 <th>Performance</th>
               </tr>
             </thead>
-            <tbody>${rowsHtml || '<tr><td colspan="5">No report records found.</td></tr>'}</tbody>
+            <tbody>${rowsHtml || '<tr><td colspan="8">No report records found.</td></tr>'}</tbody>
           </table>
         </body>
       </html>
@@ -151,7 +162,7 @@ function Reports() {
     <>
       <Header
         title="Reports"
-        subtitle="Revenue, user activity, and clinic performance reports."
+        subtitle="Admin-wise clinic revenue, user activity, and performance reports."
         action={
           <>
             <button className="sa-btn" onClick={exportPdf} disabled={!filteredRows.length}>
@@ -169,7 +180,7 @@ function Reports() {
       <SearchFilter
         value={search}
         onChange={setSearch}
-        placeholder="Search reports by clinic, revenue, users, or status..."
+        placeholder="Search reports by admin, clinic, revenue, users, or status..."
         filters={statusFilters}
         selectedFilter={status}
         onFilterChange={setStatus}
@@ -177,7 +188,7 @@ function Reports() {
 
       <div className="sa-panel">
         <h3>Reports Dashboard</h3>
-        <p>Monthly revenue report and usage trend.</p>
+        <p>Monthly total revenue and admin-wise usage trend.</p>
         {loading ? <div className="sa-state">Loading reports...</div> : null}
         {!loading && error ? <div className="sa-state sa-state--error">{error}</div> : null}
         {!loading && !error ? <Charts data={chartData} type="line" dataKey="revenue" secondaryKey="users" /> : null}

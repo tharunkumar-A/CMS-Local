@@ -1,9 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Eye, Plus } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Header from "../../../components/superadmin/Header";
 import DataTable from "../../../components/superadmin/DataTable";
 import SearchFilter from "../../../components/superadmin/SearchFilter";
-import { createClinicAdmin, fetchAdmins, fetchClinics } from "../superAdminApi";
+import {
+  deleteAdmin,
+  fetchAdmin,
+  fetchAdmins,
+  fetchClinics,
+  saveAdmin,
+  syncAdminStaffClinic,
+} from "../superAdminApi";
+import PasswordField from "../../../components/PasswordField";
 import { useToast } from "../../../components/ToastProvider";
 import {
   onlyAlpha,
@@ -19,12 +27,41 @@ const emptyAdmin = {
   email: "",
   phone: "",
   temporaryPassword: "",
-  role: "Clinic Admin",
+  role: "Admin",
   assignedClinicId: "",
   sendWelcomeEmail: true,
 };
 
+const emptyAdminClinic = {
+  id: "",
+  name: "",
+};
 
+const getAdminClinicId = (admin, clinics = []) =>
+  clinics.find((clinic) => clinic.name === admin?.assignedClinic)?.id ||
+  admin?.assignedClinicId ||
+  admin?.raw?.clinicId ||
+  admin?.raw?.hospitalId ||
+  admin?.raw?.assignedClinicId ||
+  "";
+
+const getAdminClinicName = (admin, clinics = []) =>
+  admin?.assignedClinic ||
+  clinics.find((clinic) => String(clinic.id) === String(getAdminClinicId(admin, clinics)))?.name ||
+  "";
+
+const isCurrentAdmin = (admin = {}) =>
+  String(admin.email || admin.raw?.adminEmail || admin.raw?.AdminEmail || "").toLowerCase() ===
+  String(localStorage.getItem("adminEmail") || "").toLowerCase();
+
+const updateCurrentAdminClinicSession = (admin, clinicId, clinicName) => {
+  if (!isCurrentAdmin(admin)) return;
+
+  localStorage.setItem("hospitalId", String(clinicId || ""));
+  localStorage.setItem("hospitalName", clinicName || "");
+  localStorage.setItem("clinicName", clinicName || "");
+  localStorage.setItem("assignedClinic", clinicName || "");
+};
 
 
 function Admins() {
@@ -36,6 +73,8 @@ function Admins() {
   const [admins, setAdmins] = useState([]);
   const [clinics, setClinics] = useState([]);
   const [form, setForm] = useState(emptyAdmin);
+  const [originalAdminClinic, setOriginalAdminClinic] = useState(emptyAdminClinic);
+  const [editingAdminId, setEditingAdminId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -70,6 +109,66 @@ function Admins() {
     loadClinics();
   }, []);
 
+  const openCreateForm = () => {
+    setSelectedAdmin(null);
+    setEditingAdminId("");
+    setForm(emptyAdmin);
+    setOriginalAdminClinic(emptyAdminClinic);
+    setShowForm(true);
+    setError("");
+  };
+
+  const openEditForm = async (admin) => {
+    const initialClinicId = getAdminClinicId(admin, clinics);
+    const initialClinicName = getAdminClinicName(admin, clinics);
+
+    setSelectedAdmin(null);
+    setEditingAdminId(admin.id);
+    setOriginalAdminClinic({
+      id: initialClinicId,
+      name: initialClinicName,
+    });
+    setForm({
+      ...emptyAdmin,
+      fullName: admin.name || "",
+      email: admin.email || "",
+      phone: admin.phone || "",
+      temporaryPassword: "",
+      role: "Admin",
+      assignedClinicId: initialClinicId,
+    });
+    setShowForm(true);
+    setError("");
+
+    try {
+      const remoteAdmin = await fetchAdmin(admin.id);
+      const remoteClinicId = getAdminClinicId(remoteAdmin, clinics) || initialClinicId;
+      const remoteClinicName = getAdminClinicName(remoteAdmin, clinics) || initialClinicName;
+
+      setOriginalAdminClinic({
+        id: remoteClinicId,
+        name: remoteClinicName,
+      });
+      setForm((current) => ({
+        ...current,
+        fullName: remoteAdmin.name || current.fullName,
+        email: remoteAdmin.email || current.email,
+        phone: remoteAdmin.phone || current.phone,
+        role: "Admin",
+        assignedClinicId: remoteClinicId || current.assignedClinicId,
+      }));
+    } catch {
+      // Keep the table row values when the detail endpoint is unavailable.
+    }
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingAdminId("");
+    setForm(emptyAdmin);
+    setOriginalAdminClinic(emptyAdminClinic);
+  };
+
   const handleChange = (event) => {
     const { checked, name, type, value } = event.target;
     let nextValue = value;
@@ -95,10 +194,9 @@ function Admins() {
       fullName: validateAlpha(form.fullName, "Full name"),
       email: validateGmail(form.email),
       phone: validateMobile(form.phone, "Phone"),
-      temporaryPassword: validateStrongPassword(
-        form.temporaryPassword,
-        "Temporary password"
-      ),
+      temporaryPassword: editingAdminId && !form.temporaryPassword
+        ? ""
+        : validateStrongPassword(form.temporaryPassword, "Temporary password"),
       role: validateAlpha(form.role, "Role"),
       assignedClinicId: form.assignedClinicId ? "" : "Assigned clinic is required.",
     };
@@ -125,14 +223,24 @@ function Admins() {
     try {
       const selectedClinic = clinics.find((clinic) => String(clinic.id) === String(form.assignedClinicId));
       const clinicId = Number(form.assignedClinicId) || form.assignedClinicId;
+      const previousAdmin = admins.find((admin) => String(admin.id) === String(editingAdminId));
+      const previousClinicId =
+        originalAdminClinic.id ||
+        getAdminClinicId(previousAdmin, clinics) ||
+        (isCurrentAdmin(previousAdmin) ? localStorage.getItem("hospitalId") : "");
+      const previousClinicName =
+        originalAdminClinic.name ||
+        getAdminClinicName(previousAdmin, clinics) ||
+        (isCurrentAdmin(previousAdmin) ? localStorage.getItem("clinicName") : "");
       const adminName = form.fullName.trim();
       const adminEmail = form.email.trim();
       const adminMobileNumber = form.phone.trim();
       const clinicName = selectedClinic?.name || "";
       const temporaryPassword = form.temporaryPassword;
-      await createClinicAdmin({
+      await saveAdmin({
         AdminName: adminName,
         AdminEmail: adminEmail,
+        MobileNumber: adminMobileNumber,
         AdminMobileNumber: adminMobileNumber,
         ClinicName: clinicName,
         AdminPassword: temporaryPassword,
@@ -153,10 +261,37 @@ function Admins() {
         assignedClinicId: clinicId,
         assignedClinic: selectedClinic?.name || "",
         sendWelcomeEmail: form.sendWelcomeEmail,
-      });
-      setForm(emptyAdmin);
-      setShowForm(false);
-      toast.success("Admin created successfully");
+      }, editingAdminId || undefined);
+      updateCurrentAdminClinicSession(
+        previousAdmin || { email: adminEmail },
+        clinicId,
+        clinicName
+      );
+      if (editingAdminId) {
+        try {
+          const syncResult = await syncAdminStaffClinic({
+            admin: previousAdmin || {
+              id: editingAdminId,
+              name: adminName,
+              email: adminEmail,
+              assignedClinic: previousClinicName,
+              assignedClinicId: previousClinicId,
+            },
+            previousClinicId,
+            previousClinicName,
+            clinicId,
+            clinicName,
+          });
+
+          if (syncResult.updated) {
+            toast.success(`Updated ${syncResult.updated} staff clinic assignments`);
+          }
+        } catch (syncError) {
+          toast.error(syncError.message || "Admin updated, but staff clinic sync failed.");
+        }
+      }
+      closeForm();
+      toast.success(editingAdminId ? "Admin updated successfully" : "Admin created successfully");
       await loadAdmins();
     } catch (requestError) {
       const message = requestError.message || "Unable to create admin.";
@@ -169,13 +304,36 @@ function Admins() {
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return admins.filter((admin) => {
+    return admins.map((admin) => ({
+      ...admin,
+      assignedClinic: getAdminClinicName(admin, clinics),
+      role: "Admin",
+    })).filter((admin) => {
       const matchesSearch = [admin.name, admin.email, admin.assignedClinic, admin.role]
         .some((value) => String(value).toLowerCase().includes(query));
       const matchesStatus = status === "All" || admin.status === status;
       return matchesSearch && matchesStatus;
     });
-  }, [admins, search, status]);
+  }, [admins, clinics, search, status]);
+
+  const handleDelete = async (admin) => {
+    const confirmed = window.confirm(`Delete ${admin.name || "this admin"}?`);
+    if (!confirmed) return;
+
+    setError("");
+
+    try {
+      await deleteAdmin(admin.id);
+      if (selectedAdmin?.id === admin.id) setSelectedAdmin(null);
+      if (editingAdminId === admin.id) closeForm();
+      toast.success("Admin deleted successfully");
+      await loadAdmins();
+    } catch (requestError) {
+      const message = requestError.message || "Unable to delete admin.";
+      setError(message);
+      toast.error(message);
+    }
+  };
 
   const columns = [
     { key: "name", label: "Name" },
@@ -201,6 +359,12 @@ function Admins() {
           <button className="sa-icon-btn" onClick={() => setSelectedAdmin(admin)} title="View admin">
             <Eye size={15} />
           </button>
+          <button className="sa-icon-btn" onClick={() => openEditForm(admin)} title="Edit admin">
+            <Pencil size={15} />
+          </button>
+          <button className="sa-icon-btn" onClick={() => handleDelete(admin)} title="Delete admin">
+            <Trash2 size={15} />
+          </button>
         </div>
       ),
     },
@@ -214,10 +378,7 @@ function Admins() {
         action={
           <button
             className="sa-btn sa-btn-primary"
-            onClick={() => {
-              setSelectedAdmin(null);
-              setShowForm((value) => !value);
-            }}
+            onClick={showForm ? closeForm : openCreateForm}
           >
             <Plus size={16} />
             Create Admin
@@ -236,8 +397,8 @@ function Admins() {
 
       {showForm ? (
         <form className="sa-form-card" style={{ marginBottom: 16 }} onSubmit={handleCreateAdmin}>
-          <h3>Create new admin</h3>
-          <p className="sa-form-subtitle">Invite a new administrator to a clinic.</p>
+          <h3>{editingAdminId ? "Edit admin" : "Create new admin"}</h3>
+          <p className="sa-form-subtitle">Manage administrator access for a clinic.</p>
           {error ? <div className="sa-state sa-state--error">{error}</div> : null}
           <div className="sa-form-grid">
             <div className="sa-form-field">
@@ -290,16 +451,15 @@ function Admins() {
             </div>
             <div className="sa-form-field">
               <label htmlFor="admin-temporary-password">Temporary password</label>
-              <input
+              <PasswordField
                 id="admin-temporary-password"
                 name="temporaryPassword"
-                type="password"
                 value={form.temporaryPassword}
                 onChange={handleChange}
                 className={fieldErrors.temporaryPassword ? "is-invalid" : ""}
                 placeholder="Enter temporary password"
                 autoComplete="new-password"
-                required
+                required={!editingAdminId}
               />
               {fieldErrors.temporaryPassword ? (
                 <span className="sa-field-error">
@@ -309,17 +469,14 @@ function Admins() {
             </div>
             <div className="sa-form-field">
               <label htmlFor="admin-role">Role</label>
-              <select
+              <input
                 id="admin-role"
                 name="role"
                 value={form.role}
-                onChange={handleChange}
                 className={fieldErrors.role ? "is-invalid" : ""}
+                readOnly
                 required
-              >
-                <option>Clinic Admin</option>
-                <option>Admin</option>
-              </select>
+              />
               {fieldErrors.role ? (
                 <span className="sa-field-error">{fieldErrors.role}</span>
               ) : null}
@@ -361,11 +518,11 @@ function Admins() {
             </label>
           </div>
           <div className="sa-page-actions" style={{ marginTop: 14 }}>
-            <button type="button" className="sa-btn" onClick={() => setShowForm(false)}>
+            <button type="button" className="sa-btn" onClick={closeForm}>
               Cancel
             </button>
             <button className="sa-btn sa-btn-primary" disabled={saving}>
-              {saving ? "Creating..." : "Create admin"}
+              {saving ? "Saving..." : editingAdminId ? "Save admin" : "Create admin"}
             </button>
           </div>
         </form>

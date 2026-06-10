@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, RefreshCw, ShieldCheck, UserPlus } from "lucide-react";
 import "./RegisterDoctor.css";
 import { apiUrl } from "../../config/api";
+import PasswordField from "../../components/PasswordField";
 import { useToast } from "../../components/ToastProvider";
 import {
   onlyAlpha,
@@ -394,10 +395,9 @@ function RegisterDoctor() {
 
             <div className="register-doctor-field">
               <label htmlFor="password">Password</label>
-              <input
+              <PasswordField
                 id="password"
                 name="password"
-                type="password"
                 value={form.password}
                 onChange={(event) => updateField("password", event.target.value)}
                 className={fieldErrors.password ? "is-invalid" : ""}

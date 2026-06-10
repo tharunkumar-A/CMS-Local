@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import "./Receptionists.css";
 import { apiUrl } from "../../config/api";
+import PasswordField from "../../components/PasswordField";
 import { useToast } from "../../components/ToastProvider";
 import {
   onlyAlpha,
@@ -268,6 +269,8 @@ function Receptionists() {
       hospitalId,
       hospitalName: clinicDisplayName,
       clinicName: clinicDisplayName,
+      adminEmail: localStorage.getItem("adminEmail") || "",
+      adminName: localStorage.getItem("adminName") || "",
     };
 
     try {
@@ -574,9 +577,8 @@ function Receptionists() {
 
               <div className="receptionists-field">
                 <label htmlFor="receptionist-password">Password</label>
-                <input
+                <PasswordField
                   id="receptionist-password"
-                  type="password"
                   value={form.password}
                   onChange={(event) => updateField("password", event.target.value)}
                   className={fieldErrors.password ? "is-invalid" : ""}

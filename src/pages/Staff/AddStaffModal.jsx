@@ -7,6 +7,7 @@ import React, {
 
 import "./AddStaffModal.css";
 import { apiUrl } from "../../config/api";
+import PasswordField from "../../components/PasswordField";
 import { useToast } from "../../components/ToastProvider";
 import {
   onlyAlpha,
@@ -380,8 +381,7 @@ function AddStaffModal({
                 Password
               </label>
 
-              <input
-                type="password"
+              <PasswordField
                 name="password"
                 value={
                   formData.password

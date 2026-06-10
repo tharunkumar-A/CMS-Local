@@ -22,6 +22,63 @@ const emptyClinic = {
   status: "Active",
 };
 
+const parseAddressParts = (address = "") => {
+  const parts = String(address)
+    .split(",")
+    .map((part) => part.trim().replace(/\b\d{5,6}\b/g, "").trim())
+    .filter(Boolean);
+  const postalMatch = String(address).match(/\b\d{5,6}\b/);
+  const countryIndex = parts.findIndex((part) =>
+    /^(india|bharat|usa|united states|uk|united kingdom)$/i.test(part)
+  );
+  const country = countryIndex >= 0 ? parts[countryIndex] : parts[parts.length - 1] || "India";
+  const state = countryIndex > 0 ? parts[countryIndex - 1] : parts[parts.length - 2] || "";
+
+  return {
+    city: parts[1] || parts[0] || "",
+    state,
+    country,
+    postalCode: postalMatch?.[0] || "",
+  };
+};
+
+const buildClinicPayload = (form) => {
+  const clinicName = form.name.trim();
+  const phoneNumber = form.contactNumber.trim();
+  const email = form.email.trim();
+  const address = form.address.trim();
+  const { city, country, postalCode, state } = parseAddressParts(address);
+  const isActive = form.status === "Active";
+
+  return {
+    ClinicName: clinicName,
+    Name: clinicName,
+    name: clinicName,
+    PhoneNumber: phoneNumber,
+    ContactNumber: phoneNumber,
+    contactNumber: phoneNumber,
+    phoneNumber,
+    Email: email,
+    ClinicEmail: email,
+    email,
+    Address: address,
+    ClinicAddress: address,
+    address,
+    City: city,
+    city,
+    State: state,
+    state,
+    Country: country,
+    country,
+    PostalCode: postalCode,
+    postalCode,
+    Status: form.status,
+    status: form.status,
+    IsActive: isActive,
+    isActive,
+  };
+};
+
 function ClinicForm({ mode }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -104,7 +161,7 @@ function ClinicForm({ mode }) {
     setError("");
 
     try {
-      await saveClinic(form, mode === "edit" ? id : undefined);
+      await saveClinic(buildClinicPayload(form), mode === "edit" ? id : undefined);
       toast.success(mode === "edit" ? "Clinic updated successfully" : "Clinic created successfully");
       navigate("/superadmin/clinics");
     } catch (requestError) {
