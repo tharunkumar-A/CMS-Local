@@ -135,8 +135,10 @@ import React,
 import "./DoctorWiseReport.css";
 
 import {
+  ArrowLeft,
   Download,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import {
   BarChart,
@@ -162,6 +164,7 @@ const DOCTOR_API =
 // ================= COMPONENT =================
 
 function DoctorWiseReport() {
+  const navigate = useNavigate();
 
   const [data, setData] =
     useState([]);
@@ -308,13 +311,22 @@ function DoctorWiseReport() {
   };
 
   return (
-    <div className="report-page">
+    <div className="report-page doctor-wise-report-page">
 
       {/* HEADER */}
 
       <div className="report-header">
 
         <div>
+
+          <button
+            type="button"
+            className="report-back"
+            onClick={() => navigate("/reports")}
+          >
+            <ArrowLeft size={16} />
+            All reports
+          </button>
 
           <h2>
             Doctor-wise Report
@@ -413,7 +425,8 @@ function DoctorWiseReport() {
         </div>
 
         <button
-          className="apply"
+          type="button"
+          className="report-apply"
           onClick={fetchReport}
         >
 

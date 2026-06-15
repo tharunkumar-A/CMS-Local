@@ -127,8 +127,10 @@ import React, {
 } from "react";
 
 import {
+  ArrowLeft,
   Download,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import "./DailyReport.css";
 import { apiUrl } from "../../config/api";
@@ -144,6 +146,7 @@ const DOCTOR_API =
 // ================= COMPONENT =================
 
 function DailyReport() {
+  const navigate = useNavigate();
 
   const [data, setData] =
     useState([]);
@@ -316,6 +319,15 @@ function DailyReport() {
 
         <div>
 
+          <button
+            type="button"
+            className="report-back"
+            onClick={() => navigate("/reports")}
+          >
+            <ArrowLeft size={16} />
+            All reports
+          </button>
+
           <h1>
             Daily Appointments
           </h1>
@@ -421,7 +433,8 @@ function DailyReport() {
         {/* APPLY */}
 
         <button
-          className="apply"
+          type="button"
+          className="report-apply"
           onClick={fetchReport}
         >
 

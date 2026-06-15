@@ -331,6 +331,35 @@
   font-weight: 700;
 }
 
+.profile-message--error {
+  color: #c72520;
+}
+
+.profile-message--success {
+  color: #0f6f6f;
+}
+
+.profile-password-requirements {
+  display: grid;
+  gap: 6px;
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-password-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #687895;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-password-requirements li.met {
+  color: #0f8a66;
+}
+
 .profile-save {
   width: fit-content;
   height: 42px;

@@ -33,7 +33,7 @@ const APPOINTMENT_API_URL =
   apiUrl("Appointment");
 
 const PRESCRIPTION_API_URL =
-  apiUrl("Prescription/appointment");
+  apiUrl("Prescription");
 
 const emptyValue = "-";
 
@@ -168,10 +168,7 @@ const isPatientAppointment = (
   );
 };
 
-const normalizePrescriptions = (
-  data,
-  visit
-) => {
+const normalizePrescriptions = (data, history = []) => {
   const prescriptions =
     Array.isArray(data)
       ? data
@@ -181,76 +178,72 @@ const normalizePrescriptions = (
           ? [data]
           : [];
 
-  return prescriptions.map((prescription) => ({
-    ...prescription,
-    appointmentId:
-      prescription.appointmentId ||
-      visit.appointmentId,
-    doctorName:
-      visit.doctor?.name ||
-      emptyValue,
-    visitDate:
-      visit.date,
-    medicineNames:
-      Array.isArray(prescription.medicines)
-        ? prescription.medicines
-          .map(
-            (medicine) =>
-              medicine.medicineName
-          )
-          .filter(Boolean)
-        : [],
-  }));
+  const visitsByAppointmentId = new Map(
+    history.map((visit) => [String(visit.appointmentId), visit])
+  );
+
+  return prescriptions.map((prescription) => {
+    const appointmentId = prescription.appointmentId || emptyValue;
+    const visit = visitsByAppointmentId.get(String(appointmentId));
+    const medicines = Array.isArray(prescription.medicines)
+      ? prescription.medicines
+      : [];
+
+    return {
+      ...prescription,
+      appointmentId,
+      doctorName:
+        prescription.doctorName || visit?.doctor?.name || emptyValue,
+      visitDate: visit?.date || emptyValue,
+      medicines,
+      medicineNames: medicines
+        .map((medicine) => medicine.medicineName)
+        .filter(Boolean),
+    };
+  });
 };
 
-const fetchPrescriptions = async (history) => {
-  const visitsWithAppointments =
-    history.filter(
-      (visit) =>
-        visit.appointmentId
+const fetchPrescriptions = async (patient, history) => {
+  try {
+    const token =
+      localStorage.getItem("token") ||
+      localStorage.getItem("adminToken");
+    const response = await fetch(PRESCRIPTION_API_URL, {
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    const appointmentIds = new Set(
+      history.map((visit) => String(visit.appointmentId)).filter(Boolean)
     );
+    const patientId = String(patient.id || "").trim();
+    const patientName = String(patient.name || "").trim().toLowerCase();
 
-  if (visitsWithAppointments.length === 0)
-    return [];
-
-  const results =
-    await Promise.all(
-      visitsWithAppointments.map(
-        async (visit) => {
-          try {
-            const response = await fetch(
-              `${PRESCRIPTION_API_URL}/${visit.appointmentId}`,
-              {
-                headers: {
-                  "ngrok-skip-browser-warning":
-                    "true",
-                },
-              }
-            );
-
-            if (!response.ok)
-              return [];
-
-            const data =
-              await response.json();
-
-            return normalizePrescriptions(
-              data,
-              visit
-            );
-          } catch (error) {
-            console.warn(
-              "Unable to load prescription.",
-              error
-            );
-
-            return [];
-          }
-        }
+    return normalizePrescriptions(data, history).filter((prescription) => {
+      const prescriptionPatientId = String(
+        prescription.patientId || prescription.patient?.id || ""
+      ).trim();
+      const prescriptionPatientName = String(
+        prescription.patientName || prescription.patient?.name || ""
       )
-    );
+        .trim()
+        .toLowerCase();
 
-  return results.flat();
+      return (
+        (patientId && prescriptionPatientId === patientId) ||
+        appointmentIds.has(String(prescription.appointmentId)) ||
+        (patientName && prescriptionPatientName === patientName)
+      );
+    });
+  } catch (error) {
+    console.warn("Unable to load prescriptions.", error);
+    return [];
+  }
 };
 
 const getDisplayDate = (value) => {
@@ -439,7 +432,7 @@ function PatientDetails() {
       }
 
       const prescriptions =
-        await fetchPrescriptions(history);
+        await fetchPrescriptions(patient, history);
 
       console.log(
         "PATIENT DETAILS:",
@@ -630,17 +623,20 @@ function PatientDetails() {
 
             {/* EMERGENCY CONTACT */}
 
-            <div className="patient-info-row">
+            <div className="patient-info-row patient-info-row--emergency">
 
               <UserRound size={22} />
 
-              <span>
-                Emergency contact: {patient.emergencyContactName || "-"}
+              <div className="patient-emergency-contact">
+                <span className="patient-info-label">Emergency contact</span>
+                <strong>{patient.emergencyContactName || "-"}</strong>
                 {patient.emergencyContactPhone &&
-                  patient.emergencyContactPhone !== "-"
-                  ? `, ${patient.emergencyContactPhone}`
-                  : ""}
-              </span>
+                patient.emergencyContactPhone !== "-" ? (
+                  <a href={`tel:${patient.emergencyContactPhone}`}>
+                    {patient.emergencyContactPhone}
+                  </a>
+                ) : null}
+              </div>
 
             </div>
 
@@ -822,6 +818,25 @@ function PatientDetails() {
                           <p className="patient-prescription-instructions">
                             {prescription.instructions}
                           </p>
+                        ) : null}
+
+                        {prescription.medicines?.length ? (
+                          <div className="patient-medicine-list">
+                            {prescription.medicines.map((medicine, index) => (
+                              <div
+                                className="patient-medicine-row"
+                                key={medicine.id || `${prescription.id}-${index}`}
+                              >
+                                <strong>{medicine.medicineName || "Medicine"}</strong>
+                                <div className="patient-medicine-details">
+                                  <span>Dosage: {medicine.dosage || "-"}</span>
+                                  <span>Frequency: {medicine.frequency || "-"}</span>
+                                  <span>Duration: {medicine.duration || "-"}</span>
+                                  <span>Notes: {medicine.notes || "-"}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         ) : null}
 
                       </div>

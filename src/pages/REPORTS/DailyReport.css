@@ -6,13 +6,25 @@
 
 /* BACK */
 
-.back {
-  background: none;
-  border: none;
-  cursor: pointer;
+.daily-report .report-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   margin-bottom: 12px;
+  padding: 7px 10px;
+  border: 1px solid #dbe2ea;
+  border-radius: 9px;
+  background: #fff;
   color: #475569;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.daily-report .report-back:hover {
+  color: #0f766e;
+  border-color: #99d9d2;
+  background: #f0fdfa;
 }
 
 /* HEADER */
@@ -107,29 +119,22 @@
   border-color: #159a8c;
 }
 
-.apply {
+.daily-report .report-apply {
   background: #159a8c;
   color: white;
   border: none;
-
-  height: 52px;
-
-  padding: 0 24px;
-
-  border-radius: 12px;
-
+  height: 44px;
+  min-width: 112px;
+  padding: 0 20px;
+  border-radius: 10px;
   cursor: pointer;
-
-  font-size: 15px;
-
+  font-size: 14px;
   font-weight: 600;
-
   transition: 0.2s;
-
   align-self: flex-end;
 }
 
-.apply:hover {
+.daily-report .report-apply:hover {
   background: #0f766e;
 }
 
@@ -279,7 +284,7 @@
     width: 100%;
   }
 
-  .apply {
+  .daily-report .report-apply {
     width: 100%;
   }
 

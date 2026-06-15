@@ -275,7 +275,8 @@ import React, { useEffect, useState } from "react";
 
 import "./RevenueReport.css";
 
-import { Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import {
   LineChart,
@@ -384,6 +385,7 @@ const buildRevenueFromBilling = (billingRows = []) => {
 // ================= COMPONENT =================
 
 function RevenueReport() {
+  const navigate = useNavigate();
   const [data, setData] = useState([]);
 
   const [doctors, setDoctors] = useState([]);
@@ -523,11 +525,20 @@ function RevenueReport() {
   };
 
   return (
-    <div className="report-page">
+    <div className="report-page revenue-report-page">
       {/* HEADER */}
 
       <div className="report-header">
         <div>
+          <button
+            type="button"
+            className="report-back"
+            onClick={() => navigate("/reports")}
+          >
+            <ArrowLeft size={16} />
+            All reports
+          </button>
+
           <h2>Revenue Report</h2>
 
           <p>Earnings and total revenue</p>
@@ -587,7 +598,7 @@ function RevenueReport() {
 
         {/* APPLY */}
 
-        <button className="apply" onClick={fetchRevenue}>
+        <button type="button" className="report-apply" onClick={fetchRevenue}>
           Apply
         </button>
       </div>

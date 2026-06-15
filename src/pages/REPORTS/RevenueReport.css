@@ -31,22 +31,25 @@
 
 /* BACK */
 
-.back {
-  border: none;
-  background: none;
+.revenue-report-page .report-back {
+  border: 1px solid #dbe2ea;
+  border-radius: 9px;
+  background: #fff;
   cursor: pointer;
-
   margin-bottom: 8px;
-
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-
+  gap: 7px;
   color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 7px 10px;
+}
 
-  font-size: 15px;
-
-  padding: 0;
+.revenue-report-page .report-back:hover {
+  color: #0f766e;
+  border-color: #99d9d2;
+  background: #f0fdfa;
 }
 
 /* EXPORT */
@@ -86,7 +89,7 @@
 
   grid-template-columns:
     repeat(3, minmax(220px, 1fr))
-    180px;
+    120px;
 
   gap: 18px;
 
@@ -147,29 +150,21 @@
 
 /* APPLY */
 
-.apply {
-  height: 56px;
-
+.revenue-report-page .report-apply {
+  height: 44px;
   border: none;
-
-  border-radius: 14px;
-
+  border-radius: 10px;
   background: #159a8c;
-
   color: white;
-
-  font-size: 18px;
-
+  font-size: 14px;
   font-weight: 600;
-
   cursor: pointer;
-
   transition: 0.2s;
-
   width: 100%;
+  align-self: end;
 }
 
-.apply:hover {
+.revenue-report-page .report-apply:hover {
   background: #0f766e;
 }
 
@@ -270,8 +265,10 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .apply {
+  .revenue-report-page .report-apply {
     grid-column: span 2;
+    width: 120px;
+    justify-self: end;
   }
 }
 
@@ -290,8 +287,9 @@
     grid-template-columns: 1fr;
   }
 
-  .apply {
+  .revenue-report-page .report-apply {
     grid-column: span 1;
+    width: 100%;
   }
 
   .thead,

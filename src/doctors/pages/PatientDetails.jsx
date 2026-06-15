@@ -204,6 +204,23 @@ const mergeVisits = (...visitGroups) => {
   return sortVisits([...visitsByKey.values()]);
 };
 
+const getOldestVisit = (visits) => {
+  if (!Array.isArray(visits) || visits.length < 2) return null;
+  return visits[visits.length - 1];
+};
+
+const getOverallAppointmentsLabel = (name) => {
+  const patientName = String(name || "").trim();
+  if (!patientName || patientName === emptyValue) {
+    return "Patient's Overall Appointments";
+  }
+
+  const possessiveName = /s$/i.test(patientName)
+    ? `${patientName}'`
+    : `${patientName}'s`;
+  return `${possessiveName} Overall Appointments`;
+};
+
 const looksLikePrescription = (record) =>
   Boolean(
     record &&
@@ -401,6 +418,7 @@ function PatientDetails() {
         const scopedPrescriptions = prescriptionsFromAppointments.length
           ? prescriptionsFromAppointments
           : fallbackPrescriptions;
+        const oldestVisit = getOldestVisit(scopedVisits);
 
         setPatient({
           ...overviewPatient,
@@ -408,8 +426,8 @@ function PatientDetails() {
           pastPrescriptions: scopedPrescriptions,
           overallAppointments: totalPatientAppointments,
           assignedAppointments: scopedVisits.length,
-          lastVisit: scopedVisits[0]
-            ? formatDate(scopedVisits[0].date)
+          lastVisit: oldestVisit
+            ? formatDate(oldestVisit.date)
             : emptyValue,
         });
       } catch (err) {
@@ -431,7 +449,10 @@ function PatientDetails() {
       { label: "Chronic Diseases", value: patient.chronicDiseases },
       { label: "Current Medications", value: patient.currentMedications },
       { label: "Surgeries", value: patient.surgeries },
-      { label: "Overall Appointments", value: patient.overallAppointments },
+      {
+        label: getOverallAppointmentsLabel(patient.name),
+        value: patient.overallAppointments,
+      },
       { label: "Assigned Visits", value: patient.assignedAppointments },
       { label: "Last Visit", value: patient.lastVisit },
     ];

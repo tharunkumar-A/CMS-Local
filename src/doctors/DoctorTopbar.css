@@ -105,25 +105,4 @@
   color: #0f9d9d;
 }
 
-/* Notification badge */
-.dr-notif-btn {
-  position: relative;
-}
-
-.dr-notif-badge {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  width: 16px;
-  height: 16px;
-  background: #ef4444;
-  color: #fff;
-  border-radius: 50%;
-  font-size: 9px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* Profile */

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import "./DoctorSchedule.css";
 import { apiUrl } from "../../config/api";
 
@@ -222,6 +223,7 @@ const buildScheduledDates = (startDate, endDate, workingDays) => {
 };
 
 function Schedule() {
+  const navigate = useNavigate();
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const defaultEndDate = useMemo(
     () => toDateInputValue(addDays(new Date(), 30)),
@@ -405,6 +407,7 @@ function Schedule() {
       );
       setPreviewDate(scheduledDates[0].value);
       setSlotRefreshKey((value) => value + 1);
+      navigate("/doctors", { replace: true });
     } catch (error) {
       setHasSaveError(true);
       setSaveMessage(error.message || "Unable to create the schedule.");

@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Calendar, Menu, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import UserProfileMenu from "../profile/UserProfileMenu";
 import "./DoctorTopbar.css";
 
@@ -29,15 +29,6 @@ function DoctorTopbar({ title, onMenuToggle }) {
       </div>
 
       <div className="dr-topbar-right">
-        <button className="dr-topbar-icon-btn dr-notif-btn" type="button" title="Notifications">
-          <Bell size={18} />
-          <span className="dr-notif-badge">1</span>
-        </button>
-
-        <button className="dr-topbar-icon-btn" type="button" title="Calendar">
-          <Calendar size={18} />
-        </button>
-
         <UserProfileMenu roleType="doctor" />
       </div>
     </header>

@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Stethoscope,
   ClipboardList,
-  Settings,
 } from "lucide-react";
 import "./DoctorSidebar.css";
 import { getClinicDisplayName } from "../utils/clinicDisplay";
@@ -15,7 +14,6 @@ const NAV_ITEMS = [
   { label: "Consultation", icon: Stethoscope,     path: "/doctor/consultation" },
   { label: "Prescription", icon: ClipboardList,   path: "/doctor/prescription" },
   { label: "Appointments", icon: ClipboardList,   path: "/doctor/appointments" },
-  { label: "Settings",     icon: Settings,        path: "/doctor/settings" },
 ];
 
 const getInitials = (name) =>
