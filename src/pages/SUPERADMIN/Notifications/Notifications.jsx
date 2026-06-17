@@ -6,8 +6,7 @@ import { createNotification, fetchNotifications } from "../superAdminApi";
 
 const emptyNotification = {
   title: "",
-  targetUsers: "All Clinics",
-  status: "Draft",
+  targetUsers: "All",
   message: "",
 };
 
@@ -41,7 +40,7 @@ function Notifications() {
     setForm((current) => ({ ...current, [name]: value }));
   };
 
-  const handleSubmit = async (status) => {
+  const handleSubmit = async () => {
     if (!form.title.trim() || !form.message.trim()) {
       setError("Title and message are required.");
       return;
@@ -51,7 +50,7 @@ function Notifications() {
     setError("");
 
     try {
-      await createNotification({ ...form, status });
+      await createNotification({ ...form, status: "Sent" });
       setForm(emptyNotification);
       setShowForm(false);
       await loadNotifications();
@@ -92,16 +91,11 @@ function Notifications() {
             <div className="sa-form-field">
               <label>Target Users</label>
               <select name="targetUsers" value={form.targetUsers} onChange={handleChange}>
-                <option>All Clinics</option>
-                <option>Clinic Admins</option>
-                <option>Active Users</option>
-              </select>
-            </div>
-            <div className="sa-form-field">
-              <label>Status</label>
-              <select name="status" value={form.status} onChange={handleChange}>
-                <option>Draft</option>
-                <option>Sent</option>
+                <option>All</option>
+                <option>Admins</option>
+                <option>Doctors</option>
+                <option>Users</option>
+                <option>Receptionists</option>
               </select>
             </div>
             <div className="sa-form-field sa-form-field-full">
@@ -116,10 +110,7 @@ function Notifications() {
             </div>
           </div>
           <div className="sa-page-actions" style={{ marginTop: 14 }}>
-            <button className="sa-btn" type="button" disabled={saving} onClick={() => handleSubmit("Draft")}>
-              Save Draft
-            </button>
-            <button className="sa-btn sa-btn-primary" type="button" disabled={saving} onClick={() => handleSubmit("Sent")}>
+            <button className="sa-btn sa-btn-primary" type="button" disabled={saving} onClick={handleSubmit}>
               {saving ? "Sending..." : "Send Now"}
             </button>
           </div>

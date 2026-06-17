@@ -8,6 +8,7 @@ export const SUPER_ADMIN_API = {
   admins: "admins",
   clinics: "Clinics",
   notifications: "notifications",
+  notificationSend: "notifications/send",
   auditLogs: "AuditLogs",
   loginHistory: "AuditLogs/login-history",
   dashboardSummary: "SuperAdmin/summary",
@@ -551,6 +552,13 @@ export const normalizeNotification = (notification = {}) => ({
   message: pick(notification, ["message", "body", "description"]),
   targetUsers: pick(notification, ["targetUsers", "audience", "target", "recipient"], "All Clinics"),
   status: normalizeStatus(pick(notification, ["status", "state"], "Sent")),
+  createdAt: pick(notification, ["createdAt", "createdOn", "date", "timestamp"], ""),
+});
+
+const buildNotificationPayload = (notification = {}) => ({
+  title: String(pick(notification, ["title", "subject"], "")).trim(),
+  message: String(pick(notification, ["message", "body", "description"], "")).trim(),
+  targetUsers: String(pick(notification, ["targetUsers", "audience", "target", "recipient"], "All Clinics")).trim(),
 });
 
 const pickNestedObject = (source, keys) => {
@@ -1427,25 +1435,33 @@ export const fetchNotifications = async () => {
 };
 
 export const createNotification = async (notification) => {
+  const status = normalizeStatus(pick(notification, ["status", "state"], "Sent"));
+  const payload = buildNotificationPayload(notification);
+  const isSendAction = status.toLowerCase() === "sent";
   const createdAt = new Date().toISOString();
-  const localNotification = normalizeNotification({
-    ...notification,
-    id: `local-notification-${Date.now()}`,
+  const result = await superAdminRequest(
+    isSendAction ? SUPER_ADMIN_API.notificationSend : SUPER_ADMIN_API.notifications,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  const resultObject = asObject(result);
+  const savedNotification = normalizeNotification({
+    ...payload,
+    ...resultObject,
+    id: pick(resultObject, ["id", "notificationId", "_id"], `local-notification-${Date.now()}`),
+    status,
     createdAt,
   });
 
-  prependLocalItem(LOCAL_NOTIFICATIONS_KEY, localNotification);
-
-  try {
-    const result = await superAdminRequest(SUPER_ADMIN_API.notifications, {
-      method: "POST",
-      body: notification,
-    });
-    recordSuperAdminActivity("Created notification", "Notifications", pick(notification, ["title", "subject"], "Notification"));
-    return result;
-  } catch (error) {
-    return localNotification;
-  }
+  prependLocalItem(LOCAL_NOTIFICATIONS_KEY, savedNotification);
+  recordSuperAdminActivity(
+    isSendAction ? "Sent notification" : "Created notification",
+    "Notifications",
+    payload.title || "Notification"
+  );
+  return savedNotification;
 };
 
 export const markNotificationRead = async (id) => {
@@ -1539,9 +1555,9 @@ export const deleteAuditLog = async (id) =>
   superAdminRequest(`${SUPER_ADMIN_API.auditLogs}/${id}`, { method: "DELETE" });
 
 export const createNotificationRemote = async (notification) =>
-  superAdminRequest(SUPER_ADMIN_API.notifications, {
+  superAdminRequest(SUPER_ADMIN_API.notificationSend, {
     method: "POST",
-    body: notification,
+    body: buildNotificationPayload(notification),
   });
 
 const addRoleLookupValue = (lookup, key, role) => {

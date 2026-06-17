@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { fetchNotifications, markNotificationRead } from "../pages/SUPERADMIN/superAdminApi";
@@ -15,6 +15,49 @@ const getCurrentRole = () =>
 const normalizeRole = (role = "") =>
   String(role).trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 
+const getCurrentUserKey = () =>
+  [
+    localStorage.getItem("userEmail"),
+    localStorage.getItem("adminEmail"),
+    localStorage.getItem("doctorEmail"),
+    localStorage.getItem("receptionistEmail"),
+    localStorage.getItem("email"),
+    getCurrentRole(),
+  ]
+    .filter(Boolean)
+    .join("_")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_") || "current_user";
+
+const getReadStorageKey = () => `read_notifications_${getCurrentUserKey()}`;
+
+const getNotificationKey = (notification = {}) =>
+  String(
+    notification.id ||
+    [
+      notification.title,
+      notification.message,
+      notification.targetUsers,
+      notification.createdAt,
+    ].join("|")
+  );
+
+const readNotificationKeys = () => {
+  try {
+    const value = JSON.parse(localStorage.getItem(getReadStorageKey()) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveReadNotificationKey = (notification) => {
+  const key = getNotificationKey(notification);
+  const keys = new Set(readNotificationKeys());
+  keys.add(key);
+  localStorage.setItem(getReadStorageKey(), JSON.stringify(Array.from(keys)));
+};
+
 const isSentNotification = (notification = {}) =>
   String(notification.status || "").toLowerCase() === "sent";
 
@@ -28,9 +71,16 @@ const matchesTargetUsers = (notification = {}, role = "") => {
     return ["admin", "superadmin", "clinicadmin"].includes(r);
   }
 
-  if (target.includes("active")) {
-    // active users means any logged-in user role (doctors, receptionists, admins, end users)
-    return ["admin", "superadmin", "doctor", "receptionist", "user", "clinicadmin"].includes(r);
+  if (target.includes("doctor")) {
+    return r === "doctor";
+  }
+
+  if (target.includes("receptionist")) {
+    return r === "receptionist";
+  }
+
+  if (target.includes("user") || target.includes("patient")) {
+    return ["user", "patient"].includes(r);
   }
 
   // fallback: show to everyone
@@ -45,16 +95,20 @@ function NotificationPopup({ isSuperAdmin = false }) {
   const [error, setError] = useState("");
   const ref = useRef(null);
   const navigate = useNavigate();
-  const role = normalizeRole(getCurrentRole());
+  const role = useMemo(() => normalizeRole(getCurrentRole()), []);
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
       const items = await fetchNotifications();
+      const readKeys = new Set(readNotificationKeys());
       const filtered = items.filter(
-        (item) => isSentNotification(item) && matchesTargetUsers(item, role)
+        (item) =>
+          isSentNotification(item) &&
+          matchesTargetUsers(item, role) &&
+          !readKeys.has(getNotificationKey(item))
       );
       setNotifications(filtered);
     } catch (requestError) {
@@ -62,7 +116,7 @@ function NotificationPopup({ isSuperAdmin = false }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [role]);
 
   useEffect(() => {
     loadNotifications();
@@ -78,7 +132,7 @@ function NotificationPopup({ isSuperAdmin = false }) {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [open]);
+  }, [loadNotifications]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -141,7 +195,7 @@ function NotificationPopup({ isSuperAdmin = false }) {
             <div className="notification-empty">Loading notifications...</div>
           ) : error ? (
             <div className="notification-empty notification-error">{error}</div>
-          ) : visibleNotifications.length === 0 ? (
+          ) : visibleNotifications.length === 0 && !activeNotification ? (
             <div className="notification-empty">No notifications available.</div>
           ) : (
             <div className="notification-items">
@@ -153,10 +207,13 @@ function NotificationPopup({ isSuperAdmin = false }) {
                     className={`notification-item-button ${activeNotification?.id === item.id ? "is-active" : ""}`}
                     onClick={async () => {
                       setActiveNotification(item);
+                      saveReadNotificationKey(item);
                       try {
-                        await markNotificationRead(item.id);
+                        if (item.id) await markNotificationRead(item.id);
                       } catch {}
-                      setNotifications((current) => current.filter((n) => n.id !== item.id));
+                      setNotifications((current) =>
+                        current.filter((n) => getNotificationKey(n) !== getNotificationKey(item))
+                      );
                     }}
                   >
                     <div>
@@ -168,6 +225,9 @@ function NotificationPopup({ isSuperAdmin = false }) {
                     </span>
                   </button>
                 ))}
+                {!visibleNotifications.length ? (
+                  <div className="notification-empty">No unread notifications.</div>
+                ) : null}
               </div>
 
               <div className="notification-detail">
