@@ -26,25 +26,84 @@ const updateBySection = {
 
 const defaultSettings = {
   general: {
+    appName: "CMS Platform",
+    timezone: "Asia/Kolkata",
+    currency: "INR",
     name: "CMS Platform",
     status: "Enabled",
     notes: "Update general settings used across all clinics.",
   },
   email: {
-    name: "",
+    name: "CMS Notifications",
+    fromEmail: "",
+    smtpHost: "",
+    smtpPort: "587",
+    username: "",
+    password: "",
     status: "Enabled",
     notes: "Update email settings used across all clinics.",
   },
   sms: {
-    name: "",
+    name: "SMS Provider",
+    provider: "",
+    senderId: "",
+    apiKey: "",
+    apiSecret: "",
     status: "Enabled",
     notes: "Update sms settings used across all clinics.",
   },
   payment: {
-    name: "",
+    name: "Payment Gateway",
+    provider: "",
+    merchantId: "",
+    publicKey: "",
+    secretKey: "",
+    mode: "Test",
     status: "Enabled",
     notes: "Update payment settings used across all clinics.",
   },
+};
+
+const timezones = ["Asia/Kolkata", "UTC", "Asia/Dubai", "Europe/London", "America/New_York"];
+const currencies = ["INR", "USD", "AED", "EUR", "GBP"];
+
+const fieldsBySection = {
+  general: [
+    { name: "appName", label: "App Name", required: true },
+    { name: "timezone", label: "Timezone", type: "select", options: timezones },
+    { name: "currency", label: "Currency", type: "select", options: currencies },
+    { name: "status", label: "Status", type: "select", options: ["Enabled", "Disabled"] },
+    { name: "notes", label: "Configuration Notes", type: "textarea", full: true },
+  ],
+  email: [
+    { name: "name", label: "Sender Name", required: true },
+    { name: "fromEmail", label: "From Email", type: "email", required: true },
+    { name: "smtpHost", label: "SMTP Host", required: true },
+    { name: "smtpPort", label: "SMTP Port", type: "number", required: true },
+    { name: "username", label: "SMTP Username" },
+    { name: "password", label: "SMTP Password", type: "password" },
+    { name: "status", label: "Status", type: "select", options: ["Enabled", "Disabled"] },
+    { name: "notes", label: "Configuration Notes", type: "textarea", full: true },
+  ],
+  sms: [
+    { name: "name", label: "Configuration Name", required: true },
+    { name: "provider", label: "Provider", required: true },
+    { name: "senderId", label: "Sender ID" },
+    { name: "apiKey", label: "API Key", required: true },
+    { name: "apiSecret", label: "API Secret", type: "password" },
+    { name: "status", label: "Status", type: "select", options: ["Enabled", "Disabled"] },
+    { name: "notes", label: "Configuration Notes", type: "textarea", full: true },
+  ],
+  payment: [
+    { name: "name", label: "Configuration Name", required: true },
+    { name: "provider", label: "Gateway Provider", required: true },
+    { name: "merchantId", label: "Merchant ID" },
+    { name: "publicKey", label: "Public Key" },
+    { name: "secretKey", label: "Secret Key", type: "password" },
+    { name: "mode", label: "Mode", type: "select", options: ["Test", "Live"] },
+    { name: "status", label: "Status", type: "select", options: ["Enabled", "Disabled"] },
+    { name: "notes", label: "Configuration Notes", type: "textarea", full: true },
+  ],
 };
 
 function Settings() {
@@ -103,6 +162,16 @@ function Settings() {
 
   const handleSave = async (event) => {
     event.preventDefault();
+    const requiredField = fieldsBySection[activeSection].find(
+      (field) => field.required && !String(activeSettings[field.name] || "").trim()
+    );
+
+    if (requiredField) {
+      setError(`${requiredField.label} is required.`);
+      setSuccess("");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setSuccess("");
@@ -117,7 +186,7 @@ function Settings() {
         sms: { ...defaultSettings.sms, ...updatedSettings.sms },
         payment: { ...defaultSettings.payment, ...updatedSettings.payment },
       });
-      setSuccess(`${activeTab} saved successfully.`);
+      setSuccess(`${activeTab} saved and applied system-wide.`);
       setTimeout(() => setSuccess(""), 3000);
     } catch (requestError) {
       setError(requestError.message || "Unable to save settings.");
@@ -156,26 +225,36 @@ function Settings() {
         {success ? <div className="sa-state">{success}</div> : null}
 
         <div className="sa-form-grid">
-          <div className="sa-form-field">
-            <label>{activeTab.replace(" Settings", "")} Name</label>
-            <input name="name" value={activeSettings.name || ""} onChange={handleChange} />
-          </div>
-          <div className="sa-form-field">
-            <label>Status</label>
-            <select name="status" value={activeSettings.status || "Enabled"} onChange={handleChange}>
-              <option>Enabled</option>
-              <option>Disabled</option>
-            </select>
-          </div>
-          <div className="sa-form-field sa-form-field-full">
-            <label>Configuration Notes</label>
-            <textarea name="notes" value={activeSettings.notes || ""} onChange={handleChange} />
-          </div>
+          {fieldsBySection[activeSection].map((field) => (
+            <div
+              className={`sa-form-field ${field.full ? "sa-form-field-full" : ""}`}
+              key={`${activeSection}-${field.name}`}
+            >
+              <label>{field.label}</label>
+              {field.type === "textarea" ? (
+                <textarea name={field.name} value={activeSettings[field.name] || ""} onChange={handleChange} />
+              ) : field.type === "select" ? (
+                <select name={field.name} value={activeSettings[field.name] || field.options[0]} onChange={handleChange}>
+                  {field.options.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name={field.name}
+                  type={field.type || "text"}
+                  value={activeSettings[field.name] || ""}
+                  onChange={handleChange}
+                  required={field.required}
+                />
+              )}
+            </div>
+          ))}
         </div>
 
         <div className="sa-page-actions" style={{ marginTop: 14 }}>
           <button className="sa-btn sa-btn-primary" disabled={saving}>
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? "Applying..." : "Save Config"}
           </button>
         </div>
       </form>

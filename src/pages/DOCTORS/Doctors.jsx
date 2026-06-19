@@ -253,6 +253,11 @@ function Doctors() {
   const [toggleLoadingId, setToggleLoadingId] = useState(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState(null);
 
+  const openAddDoctor = () => {
+    if (!requireAdminPermission("Create", denyPermission)) return;
+    navigate("/doctors/add");
+  };
+
   const fetchDoctors = async () => {
     setLoading(true);
     setError("");
@@ -651,7 +656,7 @@ function Doctors() {
 
           <button
             className="doctors-btn doctors-btn-primary"
-            onClick={() => navigate("/doctors/add")}
+            onClick={openAddDoctor}
             disabled={!canCreate}
             title={canCreate ? "Add doctor" : "Create permission required"}
           >

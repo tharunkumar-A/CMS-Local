@@ -1,6 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./AddPatientModal.css";
 import { useToast } from "../../components/ToastProvider";
+import {
+  buildAddress,
+  emptyAddressParts,
+  onlyPincodeValue,
+  validateAddressParts,
+} from "../../utils/address";
+import {
+  ADMIN_PERMISSION_DENIED_MESSAGE,
+  hasAdminPermission,
+  requireAdminPermission,
+} from "../../utils/adminPermissions";
 import {
   onlyAlpha,
   onlyIndianMobileValue,
@@ -9,12 +20,12 @@ import {
   validateGmail,
   validateMobile,
   validateNumeric,
-  validateRequired,
   validateSelected,
 } from "../../utils/validation";
 
 function AddPatientModal({ onClose, onAdd }) {
   const toast = useToast();
+  const canCreate = hasAdminPermission("Create");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -24,6 +35,7 @@ function AddPatientModal({ onClose, onAdd }) {
     emergencyContactName: "",
     emergencyContactPhone: "",
     address: "",
+    addressParts: emptyAddressParts,
   });
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
@@ -52,6 +64,28 @@ function AddPatientModal({ onClose, onAdd }) {
     setError("");
   };
 
+  const handleAddressChange = (name, value) => {
+    const nextValue = name === "pincode" ? onlyPincodeValue(value) : value;
+    setForm((previous) => {
+      const addressParts = {
+        ...(previous.addressParts || emptyAddressParts),
+        [name]: nextValue,
+      };
+
+      return {
+        ...previous,
+        addressParts,
+        address: buildAddress(addressParts),
+      };
+    });
+    setFieldErrors((previous) => ({
+      ...previous,
+      address: "",
+      [`address.${name}`]: "",
+    }));
+    setError("");
+  };
+
   const validateForm = () => {
     const nextErrors = {
       name: validateAlpha(form.name, "Name"),
@@ -67,7 +101,11 @@ function AddPatientModal({ onClose, onAdd }) {
         form.emergencyContactPhone,
         "Emergency contact number"
       ),
-      address: validateRequired(form.address, "Address"),
+      ...Object.fromEntries(
+        Object.entries(validateAddressParts(form.addressParts, "Address")).map(
+          ([key, value]) => [key === "address" ? "address" : `address.${key}`, value]
+        )
+      ),
     };
 
     Object.keys(nextErrors).forEach((key) => {
@@ -80,6 +118,11 @@ function AddPatientModal({ onClose, onAdd }) {
 
   const handleSubmit = (event) => {
     event.preventDefault();
+
+    if (!requireAdminPermission("Create", setError)) {
+      toast.error(ADMIN_PERMISSION_DENIED_MESSAGE);
+      return;
+    }
 
     if (!validateForm()) {
       setError("Please fix the highlighted fields.");
@@ -95,11 +138,17 @@ function AddPatientModal({ onClose, onAdd }) {
       phone: form.phone.trim(),
       emergencyContactName: form.emergencyContactName.trim(),
       emergencyContactPhone: form.emergencyContactPhone.trim(),
-      address: form.address.trim(),
+      address: buildAddress(form.addressParts),
       age: Number(form.age),
     });
     toast.success("Patient added successfully");
   };
+
+  useEffect(() => {
+    if (!canCreate) onClose?.();
+  }, [canCreate, onClose]);
+
+  if (!canCreate) return null;
 
   return (
     <div
@@ -213,15 +262,32 @@ function AddPatientModal({ onClose, onAdd }) {
               {fieldErrors.emergencyContactPhone ? <span className="add-patient-field-error">{fieldErrors.emergencyContactPhone}</span> : null}
             </div>
 
-            <div className="add-patient-field">
+            <div className="add-patient-field add-patient-field-full">
               <label>Address</label>
-              <input
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                className={fieldErrors.address ? "is-invalid" : ""}
-                placeholder="Street, City"
-              />
+              <div className="add-patient-address-grid">
+                {[
+                  ["streetVillage", "Street/Village Name"],
+                  ["city", "City"],
+                  ["state", "State"],
+                  ["country", "Country"],
+                  ["pincode", "Pincode"],
+                ].map(([key, label]) => (
+                  <div className="add-patient-field" key={key}>
+                    <label>{label}</label>
+                    <input
+                      value={form.addressParts?.[key] || ""}
+                      onChange={(event) => handleAddressChange(key, event.target.value)}
+                      className={fieldErrors[`address.${key}`] ? "is-invalid" : ""}
+                      inputMode={key === "pincode" ? "numeric" : undefined}
+                      maxLength={key === "pincode" ? 6 : undefined}
+                    />
+                    {fieldErrors[`address.${key}`] ? (
+                      <span className="add-patient-field-error">{fieldErrors[`address.${key}`]}</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              <textarea className="add-patient-final-address" value={buildAddress(form.addressParts)} readOnly />
               {fieldErrors.address ? <span className="add-patient-field-error">{fieldErrors.address}</span> : null}
             </div>
           </div>

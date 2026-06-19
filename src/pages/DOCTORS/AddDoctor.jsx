@@ -215,10 +215,15 @@
 
 import React, { useEffect, useState } from "react";
 import "./Modal.css";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { apiUrl } from "../../config/api";
 import { useToast } from "../../components/ToastProvider";
+import {
+  ADMIN_PERMISSION_DENIED_MESSAGE,
+  hasAdminPermission,
+  requireAdminPermission,
+} from "../../utils/adminPermissions";
 import {
   onlyAlpha,
   onlyIndianMobileValue,
@@ -345,6 +350,7 @@ const uniqueByValue = (options) => {
 function AddDoctor() {
   const navigate = useNavigate();
   const toast = useToast();
+  const canCreate = hasAdminPermission("Create");
 
   const [form, setForm] = useState({
     name: "",
@@ -507,6 +513,11 @@ function AddDoctor() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    if (!requireAdminPermission("Create", setError)) {
+      toast.error(ADMIN_PERMISSION_DENIED_MESSAGE);
+      return;
+    }
+
     if (!validateForm()) {
       setError("Please fix the highlighted fields.");
       toast.error("Please fix the highlighted fields.");
@@ -552,6 +563,10 @@ function AddDoctor() {
       setSaving(false);
     }
   };
+
+  if (!canCreate) {
+    return <Navigate to="/doctors" replace />;
+  }
 
   return (
     <div className="add-doctor-page">

@@ -149,38 +149,6 @@ const normalizeRole = (role) =>
     .toLowerCase()
     .replace(/[\s_-]+/g, '');
 
-const getPermissions = (authData, claims) => {
-  const rawPermissions =
-    authData.permissions ||
-    authData.permissionNames ||
-    authData.claims ||
-    getClaim(claims, 'permissions', 'permission', 'Permissions');
-
-  if (Array.isArray(rawPermissions)) {
-    return rawPermissions
-      .map((permission) =>
-        typeof permission === 'string'
-          ? permission
-          : permission?.name || permission?.permission || permission?.value
-      )
-      .filter(Boolean);
-  }
-
-  if (typeof rawPermissions === 'string') {
-    return rawPermissions
-      .split(',')
-      .map((permission) => permission.trim())
-      .filter(Boolean);
-  }
-
-  return [
-    authData.canView ? 'View' : '',
-    authData.canCreate ? 'Create' : '',
-    authData.canEdit ? 'Edit' : '',
-    authData.canDelete ? 'Delete' : '',
-  ].filter(Boolean);
-};
-
 const readJson = async (response) =>
   response.json().catch(() => ({}));
 
@@ -233,9 +201,11 @@ const clearStoredSession = () => {
   [
     'token',
     'adminToken',
+    'superAdminToken',
     'doctorToken',
     'receptionistToken',
     'adminRole',
+    'superAdminRole',
     'doctorRole',
     'receptionistRole',
     'userRole',
@@ -405,7 +375,7 @@ const AdminLogin = () => {
       clearStoredSession();
       localStorage.setItem('token', token);
       localStorage.setItem('userRole', role);
-      localStorage.setItem('adminPermissions', JSON.stringify(getPermissions(authData, claims)));
+      localStorage.removeItem('adminPermissions');
       localStorage.setItem('hospitalId', String(hospitalId));
       localStorage.setItem('hospitalName', clinicName);
       localStorage.setItem('clinicName', clinicName);

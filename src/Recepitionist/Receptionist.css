@@ -821,6 +821,25 @@
   resize: vertical;
 }
 
+.rc-address-block {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rc-address-block > span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.rc-address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .rc-slot-head {
   display: flex;
   justify-content: space-between;

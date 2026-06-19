@@ -1,5 +1,4 @@
 const ROLE_OVERRIDES_KEY = "superadmin_role_overrides";
-const SESSION_PERMISSIONS_KEY = "adminPermissions";
 
 export const ADMIN_PERMISSION_DENIED_MESSAGE =
   "You do not have permission for this action. Please contact Super Admin.";
@@ -37,38 +36,58 @@ const toPermissionList = (permissions) => {
 
 const getRoleOverride = (overrides = {}, role = "") => {
   const normalizedRole = normalizeRole(role);
-  const directOverride =
-    overrides.Admin ||
-    overrides.admin ||
-    overrides[role] ||
-    overrides[normalizedRole] ||
-    null;
+  const adminLikeRoles = new Set(["admin", "clinicadmin"]);
+  const targetRoles = adminLikeRoles.has(normalizedRole)
+    ? adminLikeRoles
+    : new Set([normalizedRole]);
 
-  if (directOverride) return directOverride;
-
-  return Object.values(overrides).find((override) => {
+  const matchingOverrides = Object.entries(overrides).filter(([key, override]) => {
     if (!override || typeof override !== "object") return false;
+    if (override.permissionsSynced !== true) return false;
 
+    const normalizedKey = normalizeRole(key);
     const overrideRole = normalizeRole(
       override.roleName || override.name || override.role || ""
     );
 
-    return overrideRole === normalizedRole || overrideRole === "admin";
+    return targetRoles.has(normalizedKey) || targetRoles.has(overrideRole);
   });
+
+  if (!matchingOverrides.length) return null;
+  if (matchingOverrides.length === 1) return matchingOverrides[0][1];
+
+  const permissionLists = matchingOverrides.map(([, override]) =>
+    toPermissionList(override.permissions)
+  );
+  const allowedPermissions = ["View", "Create", "Edit", "Delete"].filter((permission) =>
+    permissionLists.every((permissions) =>
+      permissions.some(
+        (item) => normalizePermission(item) === normalizePermission(permission)
+      )
+    )
+  );
+
+  return {
+    ...matchingOverrides[matchingOverrides.length - 1][1],
+    permissions: allowedPermissions,
+  };
 };
 
 export const getCurrentAdminRole = () =>
   localStorage.getItem("adminRole") || localStorage.getItem("userRole") || "";
 
+export const isCurrentUserSuperAdmin = () =>
+  normalizeRole(getCurrentAdminRole()) === "superadmin";
+
 export const getAdminPermissions = () => {
   const role = getCurrentAdminRole();
   const normalizedRole = normalizeRole(role);
 
-  if (normalizedRole === "superadmin") {
-    return ["View", "Create", "Edit", "Delete"];
-  }
-
-  if (normalizedRole !== "admin" && normalizedRole !== "clinicadmin") {
+  if (
+    normalizedRole !== "admin" &&
+    normalizedRole !== "clinicadmin" &&
+    normalizedRole !== "superadmin"
+  ) {
     return ["View"];
   }
 
@@ -78,14 +97,6 @@ export const getAdminPermissions = () => {
 
   if (overridePermissions.length) {
     return Array.from(new Set(["View", ...overridePermissions]));
-  }
-
-  const sessionPermissions = toPermissionList(
-    safeJsonParse(localStorage.getItem(SESSION_PERMISSIONS_KEY), [])
-  );
-
-  if (sessionPermissions.length) {
-    return Array.from(new Set(["View", ...sessionPermissions]));
   }
 
   return ["View"];

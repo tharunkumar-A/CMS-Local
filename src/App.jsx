@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
@@ -39,10 +39,36 @@ import RevenueReport from "./pages/REPORTS/RevenueReport";
 import DoctorWiseReport from "./pages/REPORTS/DoctorWiseReport";
 import "./pages/SUPERADMIN/SuperAdmin.css";
 import { ToastProvider } from "./components/ToastProvider";
-import { hasAdminPermission } from "./utils/adminPermissions";
+import { hasAdminPermission, isCurrentUserSuperAdmin } from "./utils/adminPermissions";
 
-const PermissionRoute = ({ permission, children }) =>
-  hasAdminPermission(permission) ? children : <Navigate to="/dashboard" replace />;
+const usePermissionRefresh = () => {
+  const [, setVersion] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setVersion((version) => version + 1);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refresh();
+    };
+
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
+};
+
+const PermissionRoute = ({ permission, children }) => {
+  usePermissionRefresh();
+  return hasAdminPermission(permission) ? children : <Navigate to="/dashboard" replace />;
+};
+
+const SuperAdminRoute = ({ children }) =>
+  isCurrentUserSuperAdmin() ? children : <Navigate to="/dashboard" replace />;
 
 function App() {
   return (
@@ -90,17 +116,17 @@ function App() {
           <Route path="DoctorWiseReport/daily" element={<DoctorWiseReport />} />
 
           <Route path="superadmin" element={<Navigate to="/superadmin/dashboard" replace />} />
-          <Route path="superadmin/dashboard" element={<SuperAdminDashboard />} />
-          <Route path="superadmin/clinics" element={<SuperAdminClinics />} />
-          <Route path="superadmin/clinics/add" element={<SuperAdminClinicForm mode="add" />} />
-          <Route path="superadmin/clinics/edit/:id" element={<SuperAdminClinicForm mode="edit" />} />
-          <Route path="superadmin/admins" element={<SuperAdminAdmins />} />
-          <Route path="superadmin/users" element={<SuperAdminUsers />} />
-          <Route path="superadmin/roles" element={<SuperAdminRolesPermissions />} />
-          <Route path="superadmin/settings" element={<SuperAdminSettings />} />
-          <Route path="superadmin/reports" element={<SuperAdminReports />} />
-          <Route path="superadmin/audit-logs" element={<SuperAdminAuditLogs />} />
-          <Route path="superadmin/notifications" element={<SuperAdminNotifications />} />
+          <Route path="superadmin/dashboard" element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />
+          <Route path="superadmin/clinics" element={<SuperAdminRoute><SuperAdminClinics /></SuperAdminRoute>} />
+          <Route path="superadmin/clinics/add" element={<SuperAdminRoute><SuperAdminClinicForm mode="add" /></SuperAdminRoute>} />
+          <Route path="superadmin/clinics/edit/:id" element={<SuperAdminRoute><SuperAdminClinicForm mode="edit" /></SuperAdminRoute>} />
+          <Route path="superadmin/admins" element={<SuperAdminRoute><SuperAdminAdmins /></SuperAdminRoute>} />
+          <Route path="superadmin/users" element={<SuperAdminRoute><SuperAdminUsers /></SuperAdminRoute>} />
+          <Route path="superadmin/roles" element={<SuperAdminRoute><SuperAdminRolesPermissions /></SuperAdminRoute>} />
+          <Route path="superadmin/settings" element={<SuperAdminRoute><SuperAdminSettings /></SuperAdminRoute>} />
+          <Route path="superadmin/reports" element={<SuperAdminRoute><SuperAdminReports /></SuperAdminRoute>} />
+          <Route path="superadmin/audit-logs" element={<SuperAdminRoute><SuperAdminAuditLogs /></SuperAdminRoute>} />
+          <Route path="superadmin/notifications" element={<SuperAdminRoute><SuperAdminNotifications /></SuperAdminRoute>} />
 
 
 

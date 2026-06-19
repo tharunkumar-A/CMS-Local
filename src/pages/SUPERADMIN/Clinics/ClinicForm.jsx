@@ -5,75 +5,41 @@ import Header from "../../../components/superadmin/Header";
 import { fetchClinic, fetchClinics, saveClinic } from "../superAdminApi";
 import { useToast } from "../../../components/ToastProvider";
 import {
+  buildAddress,
+  emptyAddressParts,
+  onlyPincodeValue,
+  parseAddress,
+  validateAddressParts,
+} from "../../../utils/address";
+import {
   onlyAlpha,
   onlyIndianMobileValue,
   validateAlpha,
   validateGmail,
   validateMobile,
-  validateRequired,
   validateSelected,
 } from "../../../utils/validation";
 
 const emptyClinic = {
   name: "",
   address: "",
+  addressParts: emptyAddressParts,
   contactNumber: "",
   email: "",
   status: "Active",
-};
-
-const continentNames = new Set([
-  "africa",
-  "antarctica",
-  "asia",
-  "australia",
-  "europe",
-  "north america",
-  "south america",
-]);
-
-const parseAddressParts = (address = "") => {
-  const parts = String(address)
-    .split(",")
-    .map((part) => part.trim().replace(/\b\d{5,6}\b/g, "").trim())
-    .filter(Boolean);
-  const postalMatch = String(address).match(/\b\d{5,6}\b/);
-
-  return {
-    street: parts[0] || "",
-    city: parts[1] || "",
-    state: parts[2] || "",
-    country: parts[3] || "",
-    postalCode: postalMatch?.[0] || "",
-  };
-};
-
-const validateAddressFormat = (address = "") => {
-  const requiredMessage = validateRequired(address, "Address");
-  if (requiredMessage) return requiredMessage;
-
-  const parts = String(address)
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length < 4) {
-    return "Address must follow Street, City, State, Country format.";
-  }
-
-  if (continentNames.has(parts[3].toLowerCase())) {
-    return "Country must be a valid country, not a continent.";
-  }
-
-  return "";
 };
 
 const buildClinicPayload = (form) => {
   const clinicName = form.name.trim();
   const phoneNumber = form.contactNumber.trim();
   const email = form.email.trim();
-  const address = form.address.trim();
-  const { city, country, postalCode, state, street } = parseAddressParts(address);
+  const addressParts = form.addressParts || parseAddress(form.address);
+  const address = buildAddress(addressParts);
+  const city = addressParts.city.trim();
+  const country = addressParts.country.trim();
+  const postalCode = addressParts.pincode.trim();
+  const street = addressParts.streetVillage.trim();
+  const state = addressParts.state.trim();
   const isActive = form.status === "Active";
 
   return {
@@ -129,7 +95,13 @@ function ClinicForm({ mode }) {
 
       try {
         const clinic = await fetchClinic(id);
-        if (active) setForm({ ...emptyClinic, ...clinic });
+        if (active) {
+          setForm({
+            ...emptyClinic,
+            ...clinic,
+            addressParts: parseAddress(clinic.address),
+          });
+        }
       } catch (requestError) {
         if (active) setError(requestError.message || "Unable to load clinic.");
       } finally {
@@ -180,13 +152,39 @@ function ClinicForm({ mode }) {
     setError("");
   };
 
+  const handleAddressChange = (name, value) => {
+    const nextValue = name === "pincode" ? onlyPincodeValue(value) : value;
+    setForm((current) => {
+      const addressParts = {
+        ...(current.addressParts || emptyAddressParts),
+        [name]: nextValue,
+      };
+
+      return {
+        ...current,
+        addressParts,
+        address: buildAddress(addressParts),
+      };
+    });
+    setFieldErrors((current) => ({
+      ...current,
+      address: "",
+      [`address.${name}`]: "",
+    }));
+    setError("");
+  };
+
   const validateForm = () => {
     const nextErrors = {
       name: validateAlpha(form.name, "Clinic name"),
       contactNumber: validateMobile(form.contactNumber, "Contact number"),
       email: validateGmail(form.email),
       status: validateSelected(form.status, "a status"),
-      address: validateAddressFormat(form.address),
+      ...Object.fromEntries(
+        Object.entries(validateAddressParts(form.addressParts, "Address")).map(
+          ([key, value]) => [key === "address" ? "address" : `address.${key}`, value]
+        )
+      ),
     };
 
     Object.keys(nextErrors).forEach((key) => {
@@ -318,13 +316,34 @@ function ClinicForm({ mode }) {
           </div>
           <div className="sa-form-field sa-form-field-full">
             <label>Address</label>
-            <textarea
-              name="address"
-              value={form.address}
-              onChange={handleChange}
-              className={fieldErrors.address ? "is-invalid" : ""}
-              required
-            />
+            <div className="sa-form-grid">
+              {[
+                ["streetVillage", "Street/Village Name"],
+                ["city", "City"],
+                ["state", "State"],
+                ["country", "Country"],
+                ["pincode", "Pincode"],
+              ].map(([key, label]) => (
+                <div className="sa-form-field" key={key}>
+                  <label>{label}</label>
+                  <input
+                    value={form.addressParts?.[key] || ""}
+                    onChange={(event) => handleAddressChange(key, event.target.value)}
+                    className={fieldErrors[`address.${key}`] ? "is-invalid" : ""}
+                    inputMode={key === "pincode" ? "numeric" : undefined}
+                    maxLength={key === "pincode" ? 6 : undefined}
+                    required
+                  />
+                  {fieldErrors[`address.${key}`] ? (
+                    <span className="sa-field-error">{fieldErrors[`address.${key}`]}</span>
+                  ) : null}
+                </div>
+              ))}
+              <div className="sa-form-field sa-form-field-full">
+                <label>Final Address</label>
+                <textarea value={buildAddress(form.addressParts)} readOnly />
+              </div>
+            </div>
             {fieldErrors.address ? <span className="sa-field-error">{fieldErrors.address}</span> : null}
           </div>
         </div>

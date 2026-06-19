@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import "./NewAppointment.css";
 import { CalendarPlus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import {
   createAppointmentId,
   DOCTOR_OPTIONS,
@@ -11,6 +11,11 @@ import {
 import { loadPatients } from "../PATIENTS/patientsData";
 import { useToast } from "../../components/ToastProvider";
 import {
+  ADMIN_PERMISSION_DENIED_MESSAGE,
+  hasAdminPermission,
+  requireAdminPermission,
+} from "../../utils/adminPermissions";
+import {
   validateDate,
   validateRequired,
   validateSelected,
@@ -19,6 +24,7 @@ import {
 function NewAppointment() {
   const navigate = useNavigate();
   const toast = useToast();
+  const canCreate = hasAdminPermission("Create");
   const patientOptions = useMemo(
     () => loadPatients().map((patient) => patient.name),
     []
@@ -64,6 +70,11 @@ function NewAppointment() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
+    if (!requireAdminPermission("Create", setError)) {
+      toast.error(ADMIN_PERMISSION_DENIED_MESSAGE);
+      return;
+    }
+
     if (!validateForm()) {
       setError("Please fix the highlighted fields.");
       toast.error("Please fix the highlighted fields.");
@@ -85,6 +96,10 @@ function NewAppointment() {
     toast.success("Appointment booked successfully");
     navigate("/appointments");
   };
+
+  if (!canCreate) {
+    return <Navigate to="/appointments" replace />;
+  }
 
   return (
     <div className="new-appointment-page">

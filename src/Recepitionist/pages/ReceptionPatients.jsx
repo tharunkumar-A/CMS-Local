@@ -4,6 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { parseList, requestJson } from "../receptionApi";
 import { useToast } from "../../components/ToastProvider";
 import {
+  buildAddress,
+  emptyAddressParts,
+  onlyPincodeValue,
+  parseAddress,
+  validateAddressParts,
+} from "../../utils/address";
+import {
   onlyAlpha,
   onlyIndianMobileValue,
   onlyNumberValue,
@@ -27,6 +34,7 @@ const emptyForm = {
   emergencyContactPhone: "",
   gender: "Female",
   address: "",
+  addressParts: emptyAddressParts,
 };
 
 function ReceptionPatients() {
@@ -75,9 +83,32 @@ function ReceptionPatients() {
       emergencyContactPhone: patient.emergencyContactPhone || "",
       gender: patient.gender || "Female",
       address: patient.address || "",
+      addressParts: parseAddress(patient.address || ""),
     });
     setFieldErrors({});
     setModal("edit");
+    setMessage("");
+  };
+
+  const updateAddressField = (name, value) => {
+    const nextValue = name === "pincode" ? onlyPincodeValue(value) : value;
+    setForm((prev) => {
+      const addressParts = {
+        ...(prev.addressParts || emptyAddressParts),
+        [name]: nextValue,
+      };
+
+      return {
+        ...prev,
+        addressParts,
+        address: buildAddress(addressParts),
+      };
+    });
+    setFieldErrors((prev) => ({
+      ...prev,
+      address: "",
+      [`address.${name}`]: "",
+    }));
     setMessage("");
   };
 
@@ -118,7 +149,11 @@ function ReceptionPatients() {
         "Emergency contact phone"
       ),
       gender: validateSelected(form.gender, "gender"),
-      address: validateRequired(form.address, "Address"),
+      ...Object.fromEntries(
+        Object.entries(validateAddressParts(form.addressParts, "Address")).map(
+          ([key, value]) => [key === "address" ? "address" : `address.${key}`, value]
+        )
+      ),
     };
 
     Object.keys(nextErrors).forEach((key) => {
@@ -148,7 +183,7 @@ function ReceptionPatients() {
       emergencyContactName: form.emergencyContactName.trim(),
       emergencyContactPhone: form.emergencyContactPhone.trim(),
       gender: form.gender,
-      address: form.address.trim(),
+      address: buildAddress(form.addressParts),
     };
 
     try {
@@ -230,7 +265,10 @@ function ReceptionPatients() {
               <span className="rc-row-actions">
                 <button
                   onClick={() => {
-                    setForm(patient);
+                    setForm({
+                      ...patient,
+                      addressParts: parseAddress(patient.address || ""),
+                    });
                     setModal("view");
                   }}
                 >
@@ -274,7 +312,6 @@ function ReceptionPatients() {
                 "bloodGroup",
                 "emergencyContactName",
                 "emergencyContactPhone",
-                "address",
               ].map((field) => (
                 <label key={field}>
                   <span>
@@ -308,6 +345,37 @@ function ReceptionPatients() {
                   ) : null}
                 </label>
               ))}
+              <div className="rc-address-block">
+                <span>Address</span>
+                <div className="rc-address-grid">
+                  {[
+                    ["streetVillage", "Street/Village Name"],
+                    ["city", "City"],
+                    ["state", "State"],
+                    ["country", "Country"],
+                    ["pincode", "Pincode"],
+                  ].map(([key, label]) => (
+                    <label key={key}>
+                      <span>{label}</span>
+                      <input
+                        value={form.addressParts?.[key] || ""}
+                        disabled={modal === "view"}
+                        className={fieldErrors[`address.${key}`] ? "is-invalid" : ""}
+                        inputMode={key === "pincode" ? "numeric" : undefined}
+                        maxLength={key === "pincode" ? 6 : undefined}
+                        onChange={(event) => updateAddressField(key, event.target.value)}
+                      />
+                      {fieldErrors[`address.${key}`] ? (
+                        <small className="rc-field-error">{fieldErrors[`address.${key}`]}</small>
+                      ) : null}
+                    </label>
+                  ))}
+                </div>
+                <textarea value={buildAddress(form.addressParts)} readOnly />
+                {fieldErrors.address ? (
+                  <small className="rc-field-error">{fieldErrors.address}</small>
+                ) : null}
+              </div>
               <label>
                 <span>Gender</span>
                 <select

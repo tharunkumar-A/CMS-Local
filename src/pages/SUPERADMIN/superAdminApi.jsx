@@ -1353,25 +1353,46 @@ const normalizeSettingsSection = (section = {}, defaults = {}) => ({
 
 export const normalizeSettings = (settings = {}) => {
   const payload = asObject(settings);
+  const general = payload.general || payload.generalSettings || payload;
+  const email = payload.email || payload.emailSettings || {};
+  const sms = payload.sms || payload.smsSettings || {};
+  const payment = payload.payment || payload.paymentSettings || {};
 
   return {
-    general: normalizeSettingsSection(payload.general || payload.generalSettings || payload, {
+    general: normalizeSettingsSection(general, {
+      appName: pick(general, ["appName", "applicationName", "platformName", "name"], "CMS Platform"),
+      timezone: pick(general, ["timezone", "timeZone", "defaultTimezone"], "Asia/Kolkata"),
+      currency: pick(general, ["currency", "defaultCurrency", "currencyCode"], "INR"),
       name: "CMS Platform",
       status: "Enabled",
       notes: "Update general settings used across all clinics.",
     }),
-    email: normalizeSettingsSection(payload.email || payload.emailSettings, {
-      name: "",
+    email: normalizeSettingsSection(email, {
+      name: pick(email, ["name", "senderName", "fromName"], "CMS Notifications"),
+      fromEmail: pick(email, ["fromEmail", "senderEmail", "email"], ""),
+      smtpHost: pick(email, ["smtpHost", "host", "server"], ""),
+      smtpPort: pick(email, ["smtpPort", "port"], "587"),
+      username: pick(email, ["username", "userName", "smtpUsername"], ""),
+      password: pick(email, ["password", "smtpPassword"], ""),
       status: "Enabled",
       notes: "Update email settings used across all clinics.",
     }),
-    sms: normalizeSettingsSection(payload.sms || payload.smsSettings, {
-      name: "",
+    sms: normalizeSettingsSection(sms, {
+      name: pick(sms, ["name", "providerName", "gatewayName"], "SMS Provider"),
+      provider: pick(sms, ["provider", "providerName", "gatewayName"], ""),
+      senderId: pick(sms, ["senderId", "senderID", "sender"], ""),
+      apiKey: pick(sms, ["apiKey", "key", "token"], ""),
+      apiSecret: pick(sms, ["apiSecret", "secret"], ""),
       status: "Enabled",
       notes: "Update sms settings used across all clinics.",
     }),
-    payment: normalizeSettingsSection(payload.payment || payload.paymentSettings, {
-      name: "",
+    payment: normalizeSettingsSection(payment, {
+      name: pick(payment, ["name", "providerName", "gatewayName"], "Payment Gateway"),
+      provider: pick(payment, ["provider", "providerName", "gatewayName"], ""),
+      merchantId: pick(payment, ["merchantId", "merchantID", "accountId"], ""),
+      publicKey: pick(payment, ["publicKey", "keyId", "publishableKey"], ""),
+      secretKey: pick(payment, ["secretKey", "secret", "privateKey"], ""),
+      mode: pick(payment, ["mode", "environment"], "Test"),
       status: "Enabled",
       notes: "Update payment settings used across all clinics.",
     }),
@@ -2123,6 +2144,7 @@ export const fetchReports = async () => {
   return {
     rows,
     chartData: mergeReportChartData({ revenueRows, activityRows, rows }),
+    activityRows: activityRows.map(normalizeActivity),
     error:
       summary.status === "rejected" &&
       revenueTrend.status === "rejected" &&
