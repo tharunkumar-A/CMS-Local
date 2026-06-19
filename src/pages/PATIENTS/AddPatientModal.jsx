@@ -8,6 +8,11 @@ import {
   validateAddressParts,
 } from "../../utils/address";
 import {
+  getDistrictsForState,
+  INDIA_COUNTRY,
+  INDIAN_STATES,
+} from "../../utils/indianLocations";
+import {
   ADMIN_PERMISSION_DENIED_MESSAGE,
   hasAdminPermission,
   requireAdminPermission,
@@ -67,10 +72,16 @@ function AddPatientModal({ onClose, onAdd }) {
   const handleAddressChange = (name, value) => {
     const nextValue = name === "pincode" ? onlyPincodeValue(value) : value;
     setForm((previous) => {
+      const previousParts = previous.addressParts || emptyAddressParts;
       const addressParts = {
-        ...(previous.addressParts || emptyAddressParts),
+        ...previousParts,
         [name]: nextValue,
+        country: INDIA_COUNTRY,
       };
+
+      if (name === "state" && previousParts.state !== nextValue) {
+        addressParts.city = "";
+      }
 
       return {
         ...previous,
@@ -82,6 +93,7 @@ function AddPatientModal({ onClose, onAdd }) {
       ...previous,
       address: "",
       [`address.${name}`]: "",
+      ...(name === "state" ? { "address.city": "" } : {}),
     }));
     setError("");
   };
@@ -149,6 +161,8 @@ function AddPatientModal({ onClose, onAdd }) {
   }, [canCreate, onClose]);
 
   if (!canCreate) return null;
+
+  const selectedDistricts = getDistrictsForState(form.addressParts?.state);
 
   return (
     <div
@@ -265,27 +279,78 @@ function AddPatientModal({ onClose, onAdd }) {
             <div className="add-patient-field add-patient-field-full">
               <label>Address</label>
               <div className="add-patient-address-grid">
-                {[
-                  ["streetVillage", "Street/Village Name"],
-                  ["city", "City"],
-                  ["state", "State"],
-                  ["country", "Country"],
-                  ["pincode", "Pincode"],
-                ].map(([key, label]) => (
-                  <div className="add-patient-field" key={key}>
-                    <label>{label}</label>
-                    <input
-                      value={form.addressParts?.[key] || ""}
-                      onChange={(event) => handleAddressChange(key, event.target.value)}
-                      className={fieldErrors[`address.${key}`] ? "is-invalid" : ""}
-                      inputMode={key === "pincode" ? "numeric" : undefined}
-                      maxLength={key === "pincode" ? 6 : undefined}
-                    />
-                    {fieldErrors[`address.${key}`] ? (
-                      <span className="add-patient-field-error">{fieldErrors[`address.${key}`]}</span>
-                    ) : null}
-                  </div>
-                ))}
+                <div className="add-patient-field">
+                  <label>Street/Village Name</label>
+                  <input
+                    value={form.addressParts?.streetVillage || ""}
+                    onChange={(event) => handleAddressChange("streetVillage", event.target.value)}
+                    className={fieldErrors["address.streetVillage"] ? "is-invalid" : ""}
+                  />
+                  {fieldErrors["address.streetVillage"] ? (
+                    <span className="add-patient-field-error">{fieldErrors["address.streetVillage"]}</span>
+                  ) : null}
+                </div>
+
+                <div className="add-patient-field">
+                  <label>State</label>
+                  <select
+                    value={form.addressParts?.state || ""}
+                    onChange={(event) => handleAddressChange("state", event.target.value)}
+                    className={fieldErrors["address.state"] ? "is-invalid" : ""}
+                  >
+                    <option value="">Select State</option>
+                    {INDIAN_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors["address.state"] ? (
+                    <span className="add-patient-field-error">{fieldErrors["address.state"]}</span>
+                  ) : null}
+                </div>
+
+                <div className="add-patient-field">
+                  <label>City/District</label>
+                  <select
+                    value={form.addressParts?.city || ""}
+                    onChange={(event) => handleAddressChange("city", event.target.value)}
+                    className={fieldErrors["address.city"] ? "is-invalid" : ""}
+                    disabled={!form.addressParts?.state}
+                  >
+                    <option value="">Select City/District</option>
+                    {selectedDistricts.map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors["address.city"] ? (
+                    <span className="add-patient-field-error">{fieldErrors["address.city"]}</span>
+                  ) : null}
+                </div>
+
+                <div className="add-patient-field">
+                  <label>Country</label>
+                  <input value={INDIA_COUNTRY} disabled readOnly />
+                  {fieldErrors["address.country"] ? (
+                    <span className="add-patient-field-error">{fieldErrors["address.country"]}</span>
+                  ) : null}
+                </div>
+
+                <div className="add-patient-field">
+                  <label>Pincode</label>
+                  <input
+                    value={form.addressParts?.pincode || ""}
+                    onChange={(event) => handleAddressChange("pincode", event.target.value)}
+                    className={fieldErrors["address.pincode"] ? "is-invalid" : ""}
+                    inputMode="numeric"
+                    maxLength={6}
+                  />
+                  {fieldErrors["address.pincode"] ? (
+                    <span className="add-patient-field-error">{fieldErrors["address.pincode"]}</span>
+                  ) : null}
+                </div>
               </div>
               <textarea className="add-patient-final-address" value={buildAddress(form.addressParts)} readOnly />
               {fieldErrors.address ? <span className="add-patient-field-error">{fieldErrors.address}</span> : null}

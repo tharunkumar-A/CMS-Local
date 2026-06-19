@@ -12,6 +12,11 @@ import {
   validateAddressParts,
 } from "../../../utils/address";
 import {
+  getDistrictsForState,
+  INDIA_COUNTRY,
+  INDIAN_STATES,
+} from "../../../utils/indianLocations";
+import {
   onlyAlpha,
   onlyAddressText,
   onlyIndianMobileValue,
@@ -84,6 +89,7 @@ function ClinicForm({ mode }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const selectedDistricts = getDistrictsForState(form.addressParts?.state);
 
   useEffect(() => {
     let active = true;
@@ -165,10 +171,16 @@ function ClinicForm({ mode }) {
     }
 
     setForm((current) => {
+      const previousParts = current.addressParts || emptyAddressParts;
       const addressParts = {
-        ...(current.addressParts || emptyAddressParts),
+        ...previousParts,
         [name]: nextValue,
+        country: INDIA_COUNTRY,
       };
+
+      if (name === "state" && previousParts.state !== nextValue) {
+        addressParts.city = "";
+      }
 
       return {
         ...current,
@@ -180,6 +192,7 @@ function ClinicForm({ mode }) {
       ...current,
       address: "",
       [`address.${name}`]: "",
+      ...(name === "state" ? { "address.city": "" } : {}),
     }));
     setError("");
   };
@@ -328,28 +341,82 @@ function ClinicForm({ mode }) {
           <div className="sa-form-field sa-form-field-full">
             <label>Address</label>
             <div className="sa-form-grid">
-              {[
-                ["streetVillage", "Street/Village Name"],
-                ["city", "City"],
-                ["state", "State"],
-                ["country", "Country"],
-                ["pincode", "Pincode"],
-              ].map(([key, label]) => (
-                <div className="sa-form-field" key={key}>
-                  <label>{label}</label>
-                  <input
-                    value={form.addressParts?.[key] || ""}
-                    onChange={(event) => handleAddressChange(key, event.target.value)}
-                    className={fieldErrors[`address.${key}`] ? "is-invalid" : ""}
-                    inputMode={key === "pincode" ? "numeric" : undefined}
-                    maxLength={key === "pincode" ? 6 : undefined}
-                    required
-                  />
-                  {fieldErrors[`address.${key}`] ? (
-                    <span className="sa-field-error">{fieldErrors[`address.${key}`]}</span>
-                  ) : null}
-                </div>
-              ))}
+              <div className="sa-form-field">
+                <label>Street/Village Name</label>
+                <input
+                  value={form.addressParts?.streetVillage || ""}
+                  onChange={(event) => handleAddressChange("streetVillage", event.target.value)}
+                  className={fieldErrors["address.streetVillage"] ? "is-invalid" : ""}
+                  required
+                />
+                {fieldErrors["address.streetVillage"] ? (
+                  <span className="sa-field-error">{fieldErrors["address.streetVillage"]}</span>
+                ) : null}
+              </div>
+
+              <div className="sa-form-field">
+                <label>State</label>
+                <select
+                  value={form.addressParts?.state || ""}
+                  onChange={(event) => handleAddressChange("state", event.target.value)}
+                  className={fieldErrors["address.state"] ? "is-invalid" : ""}
+                  required
+                >
+                  <option value="">Select State</option>
+                  {INDIAN_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors["address.state"] ? (
+                  <span className="sa-field-error">{fieldErrors["address.state"]}</span>
+                ) : null}
+              </div>
+
+              <div className="sa-form-field">
+                <label>City/District</label>
+                <select
+                  value={form.addressParts?.city || ""}
+                  onChange={(event) => handleAddressChange("city", event.target.value)}
+                  className={fieldErrors["address.city"] ? "is-invalid" : ""}
+                  disabled={!form.addressParts?.state}
+                  required
+                >
+                  <option value="">Select City/District</option>
+                  {selectedDistricts.map((district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors["address.city"] ? (
+                  <span className="sa-field-error">{fieldErrors["address.city"]}</span>
+                ) : null}
+              </div>
+
+              <div className="sa-form-field">
+                <label>Country</label>
+                <input value={INDIA_COUNTRY} disabled readOnly />
+                {fieldErrors["address.country"] ? (
+                  <span className="sa-field-error">{fieldErrors["address.country"]}</span>
+                ) : null}
+              </div>
+
+              <div className="sa-form-field">
+                <label>Pincode</label>
+                <input
+                  value={form.addressParts?.pincode || ""}
+                  onChange={(event) => handleAddressChange("pincode", event.target.value)}
+                  className={fieldErrors["address.pincode"] ? "is-invalid" : ""}
+                  inputMode="numeric"
+                  maxLength={6}
+                  required
+                />
+                {fieldErrors["address.pincode"] ? (
+                  <span className="sa-field-error">{fieldErrors["address.pincode"]}</span>
+                ) : null}
+              </div>
               <div className="sa-form-field sa-form-field-full">
                 <label>Final Address</label>
                 <textarea value={buildAddress(form.addressParts)} readOnly />

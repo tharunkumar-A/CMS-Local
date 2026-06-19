@@ -11,6 +11,11 @@ import {
   validateAddressParts,
 } from "../../utils/address";
 import {
+  getDistrictsForState,
+  INDIA_COUNTRY,
+  INDIAN_STATES,
+} from "../../utils/indianLocations";
+import {
   onlyAlpha,
   onlyIndianMobileValue,
   onlyNumberValue,
@@ -132,6 +137,7 @@ function ReceptionPatients() {
   }, []);
 
   const rows = useMemo(() => [...patients].reverse(), [patients]);
+  const selectedDistricts = getDistrictsForState(form.addressParts?.state);
 
   const openAdd = () => {
     setForm(emptyForm);
@@ -163,10 +169,16 @@ function ReceptionPatients() {
   const updateAddressField = (name, value) => {
     const nextValue = name === "pincode" ? onlyPincodeValue(value) : value;
     setForm((prev) => {
+      const previousParts = prev.addressParts || emptyAddressParts;
       const addressParts = {
-        ...(prev.addressParts || emptyAddressParts),
+        ...previousParts,
         [name]: nextValue,
+        country: INDIA_COUNTRY,
       };
+
+      if (name === "state" && previousParts.state !== nextValue) {
+        addressParts.city = "";
+      }
 
       return {
         ...prev,
@@ -178,6 +190,7 @@ function ReceptionPatients() {
       ...prev,
       address: "",
       [`address.${name}`]: "",
+      ...(name === "state" ? { "address.city": "" } : {}),
     }));
     setMessage("");
   };
@@ -448,28 +461,81 @@ function ReceptionPatients() {
               <div className="rc-address-block">
                 <span>Address</span>
                 <div className="rc-address-grid">
-                  {[
-                    ["streetVillage", "Street/Village Name"],
-                    ["city", "City"],
-                    ["state", "State"],
-                    ["country", "Country"],
-                    ["pincode", "Pincode"],
-                  ].map(([key, label]) => (
-                    <label key={key}>
-                      <span>{label}</span>
-                      <input
-                        value={form.addressParts?.[key] || ""}
-                        disabled={modal === "view"}
-                        className={fieldErrors[`address.${key}`] ? "is-invalid" : ""}
-                        inputMode={key === "pincode" ? "numeric" : undefined}
-                        maxLength={key === "pincode" ? 6 : undefined}
-                        onChange={(event) => updateAddressField(key, event.target.value)}
-                      />
-                      {fieldErrors[`address.${key}`] ? (
-                        <small className="rc-field-error">{fieldErrors[`address.${key}`]}</small>
-                      ) : null}
-                    </label>
-                  ))}
+                  <label>
+                    <span>Street/Village Name</span>
+                    <input
+                      value={form.addressParts?.streetVillage || ""}
+                      disabled={modal === "view"}
+                      className={fieldErrors["address.streetVillage"] ? "is-invalid" : ""}
+                      onChange={(event) => updateAddressField("streetVillage", event.target.value)}
+                    />
+                    {fieldErrors["address.streetVillage"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.streetVillage"]}</small>
+                    ) : null}
+                  </label>
+
+                  <label>
+                    <span>State</span>
+                    <select
+                      value={form.addressParts?.state || ""}
+                      disabled={modal === "view"}
+                      className={fieldErrors["address.state"] ? "is-invalid" : ""}
+                      onChange={(event) => updateAddressField("state", event.target.value)}
+                    >
+                      <option value="">Select State</option>
+                      {INDIAN_STATES.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                    {fieldErrors["address.state"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.state"]}</small>
+                    ) : null}
+                  </label>
+
+                  <label>
+                    <span>City/District</span>
+                    <select
+                      value={form.addressParts?.city || ""}
+                      disabled={modal === "view" || !form.addressParts?.state}
+                      className={fieldErrors["address.city"] ? "is-invalid" : ""}
+                      onChange={(event) => updateAddressField("city", event.target.value)}
+                    >
+                      <option value="">Select City/District</option>
+                      {selectedDistricts.map((district) => (
+                        <option key={district} value={district}>
+                          {district}
+                        </option>
+                      ))}
+                    </select>
+                    {fieldErrors["address.city"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.city"]}</small>
+                    ) : null}
+                  </label>
+
+                  <label>
+                    <span>Country</span>
+                    <input value={INDIA_COUNTRY} disabled readOnly />
+                    {fieldErrors["address.country"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.country"]}</small>
+                    ) : null}
+                  </label>
+
+                  <label>
+                    <span>Pincode</span>
+                    <input
+                      value={form.addressParts?.pincode || ""}
+                      disabled={modal === "view"}
+                      className={fieldErrors["address.pincode"] ? "is-invalid" : ""}
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(event) => updateAddressField("pincode", event.target.value)}
+                    />
+                    {fieldErrors["address.pincode"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.pincode"]}</small>
+                    ) : null}
+                  </label>
                 </div>
                 <textarea value={buildAddress(form.addressParts)} readOnly />
                 {fieldErrors.address ? (
