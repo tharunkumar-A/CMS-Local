@@ -38,6 +38,7 @@ export const SUPER_ADMIN_API = {
 
 const LOCAL_NOTIFICATIONS_KEY = "superadmin_notifications";
 const LOCAL_AUDIT_LOGS_KEY = "superadmin_audit_logs";
+const LOCAL_ROLE_OVERRIDES_KEY = "superadmin_role_overrides";
 const readLocalList = (key) => {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
@@ -57,7 +58,6 @@ const prependLocalItem = (key, item) => {
   return item;
 };
 
-<<<<<<< HEAD
 const readLocalRoleOverrides = () => {
   try {
     const value = JSON.parse(localStorage.getItem(LOCAL_ROLE_OVERRIDES_KEY) || "{}");
@@ -129,8 +129,6 @@ const deleteRoleOverride = (role = {}) => {
   writeLocalRoleOverrides(overrides);
 };
 
-=======
->>>>>>> 3a773edca39851290fa99a2865bb9be81082f3f5
 const asArray = (value) => {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return [];

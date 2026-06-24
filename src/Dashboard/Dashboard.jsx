@@ -36,6 +36,11 @@ import {
   formatCompactIndianCurrency,
   formatIndianCurrency,
 } from "../utils/format";
+import {
+  canUsePermission,
+  fetchAndStoreRolePermissions,
+} from "../utils/authorization";
+import { useToast } from "../components/ToastProvider";
 
 /* ================= API ================= */
 
@@ -71,6 +76,7 @@ function Dashboard() {
     useNavigate();
   const location =
     useLocation();
+  const toast = useToast();
 
   const [dashboardData,
     setDashboardData] =
@@ -79,7 +85,28 @@ function Dashboard() {
   const [loading,
     setLoading] =
     useState(true);
+  const [permissionsLoading,
+    setPermissionsLoading] =
+    useState(true);
+  const [permissionRecord,
+    setPermissionRecord] =
+    useState(null);
+  const canCreateDoctor =
+    !permissionsLoading &&
+    canUsePermission(
+      permissionRecord,
+      "create"
+    );
   const openAddDoctor = () => {
+    if (!canCreateDoctor) {
+      toast.error(
+        permissionsLoading
+          ? "Loading permissions. Please try again."
+          : "Create permission is disabled by Super Admin."
+      );
+      return;
+    }
+
     navigate("/doctors/add");
   };
 
@@ -89,6 +116,27 @@ function Dashboard() {
 
     fetchDashboard();
 
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPermissions = async () => {
+      setPermissionsLoading(true);
+      const record =
+        await fetchAndStoreRolePermissions();
+
+      if (active) {
+        setPermissionRecord(record);
+        setPermissionsLoading(false);
+      }
+    };
+
+    loadPermissions();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -360,7 +408,14 @@ function Dashboard() {
           type="button"
           className="dashboard-action-button"
           onClick={openAddDoctor}
-          title="Add doctor"
+          disabled={!canCreateDoctor}
+          title={
+            canCreateDoctor
+              ? "Add doctor"
+              : permissionsLoading
+                ? "Loading permissions"
+                : "Permission disabled by Super Admin"
+          }
         >
           <UserPlus size={16} />
           Add Doctor

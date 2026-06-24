@@ -221,6 +221,10 @@ import { apiUrl } from "../../config/api";
 import { useToast } from "../../components/ToastProvider";
 import { getClinicDisplayName } from "../../utils/clinicDisplay";
 import {
+  canUsePermission,
+  fetchAndStoreRolePermissions,
+} from "../../utils/authorization";
+import {
   onlyAlpha,
   onlyIndianMobileValue,
   onlyNumberValue,
@@ -368,6 +372,9 @@ function AddDoctor() {
     useState(QUALIFICATION_OPTIONS);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsWarning, setOptionsWarning] = useState("");
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionRecord, setPermissionRecord] = useState(null);
+  const canCreateDoctor = !permissionsLoading && canUsePermission(permissionRecord, "create");
 
   useEffect(() => {
     let active = true;
@@ -432,6 +439,25 @@ function AddDoctor() {
     };
 
     loadDoctorOptions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPermissions = async () => {
+      setPermissionsLoading(true);
+      const record = await fetchAndStoreRolePermissions();
+      if (active) {
+        setPermissionRecord(record);
+        setPermissionsLoading(false);
+      }
+    };
+
+    loadPermissions();
 
     return () => {
       active = false;
@@ -508,6 +534,15 @@ function AddDoctor() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!canCreateDoctor) {
+      const message = permissionsLoading
+        ? "Loading permissions. Please try again."
+        : "Create permission is disabled by Super Admin.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
 
     if (!validateForm()) {
       setError("Please fix the highlighted fields.");
@@ -742,7 +777,14 @@ function AddDoctor() {
             <button
               className="add-doctor-primary"
               type="submit"
-              disabled={saving}
+              disabled={saving || !canCreateDoctor}
+              title={
+                canCreateDoctor
+                  ? "Add doctor"
+                  : permissionsLoading
+                    ? "Loading permissions"
+                    : "Permission disabled by Super Admin"
+              }
             >
               {saving ? "Adding..." : "Add Doctor"}
             </button>

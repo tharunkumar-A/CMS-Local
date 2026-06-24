@@ -4,6 +4,13 @@ const STORAGE_KEY = "adminPermissions";
 
 const normalize = (text = "") => String(text || "").trim().toLowerCase().replace(/[_\s-]+/g, "");
 
+const PERMISSION_KEYS = {
+  view: "canView",
+  create: "canCreate",
+  edit: "canEdit",
+  delete: "canDelete",
+};
+
 const readStored = () => {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || null;
@@ -23,21 +30,86 @@ export const getStoredRolePermissions = () => {
   return Array.isArray(data?.permissions) ? data.permissions : [];
 };
 
-export const hasPermission = (permission) => {
+export const getStoredRolePermissionRecord = () => readStored();
+
+export const canUsePermission = (record, permission) => {
   if (!permission) return false;
   if (String(permission).trim().toLowerCase() === "view") return true; // view is always allowed
-  const perms = getStoredRolePermissions().map((p) => String(p || "").trim().toLowerCase());
-  return perms.includes(String(permission || "").trim().toLowerCase());
+  const normalizedPermission = String(permission || "").trim().toLowerCase();
+  const booleanKey = PERMISSION_KEYS[normalizedPermission];
+  if (booleanKey && typeof record?.[booleanKey] === "boolean") {
+    return record[booleanKey];
+  }
+
+  const perms = (Array.isArray(record?.permissions) ? record.permissions : [])
+    .map((p) => String(p || "").trim().toLowerCase());
+  return perms.includes(normalizedPermission);
+};
+
+export const hasPermission = (permission) =>
+  canUsePermission(readStored(), permission);
+
+const getCurrentPermissionRoleName = (roleName) => {
+  const storedRole =
+    roleName ||
+    localStorage.getItem("adminRole") ||
+    localStorage.getItem("userRole") ||
+    "";
+
+  return normalize(storedRole) === "superadmin" ? "Admin" : storedRole;
+};
+
+const getRoleBoolean = (role = {}, key) => {
+  const pascalKey = key.charAt(0).toUpperCase() + key.slice(1);
+  return role[key] === true || role[pascalKey] === true;
+};
+
+const getRolePermissions = (role = {}) => {
+  const rawPermissions = role.permissions || role.permissionNames || role.claims || [];
+  const permissions = [];
+
+  if (Array.isArray(rawPermissions)) {
+    rawPermissions.forEach((permission) => {
+      const value =
+        typeof permission === "string"
+          ? permission
+          : permission?.name ||
+            permission?.permission ||
+            permission?.claimValue ||
+            permission?.value;
+      if (value) permissions.push(String(value).trim());
+    });
+  } else if (rawPermissions && typeof rawPermissions === "object") {
+    Object.entries(rawPermissions).forEach(([permission, enabled]) => {
+      if (enabled === true) permissions.push(permission);
+    });
+  }
+
+  Object.entries(PERMISSION_KEYS).forEach(([permission, booleanKey]) => {
+    if (getRoleBoolean(role, booleanKey)) permissions.push(permission);
+  });
+
+  return Array.from(
+    new Set(
+      permissions
+        .map((permission) => String(permission || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 };
 
 export const fetchAndStoreRolePermissions = async (roleName) => {
   try {
+    const targetRoleName = getCurrentPermissionRoleName(roleName);
     const token =
       localStorage.getItem("token") ||
       localStorage.getItem("adminToken") ||
       localStorage.getItem("superAdminToken");
 
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const headers = {
+      "ngrok-skip-browser-warning": "true",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
     const res = await fetch(apiUrl("roles"), { headers });
     if (!res.ok) {
       writeStored(null);
@@ -46,7 +118,7 @@ export const fetchAndStoreRolePermissions = async (roleName) => {
 
     const payload = await res.json().catch(() => null);
     const roles = Array.isArray(payload) ? payload : payload?.roles || payload?.data || [];
-    const normalizedTarget = normalize(roleName || localStorage.getItem("adminRole") || "");
+    const normalizedTarget = normalize(targetRoleName);
 
     const matched = (roles || []).find((r) => {
       const name = (r.roleName || r.name || r.Role || r.RoleName || "");
@@ -58,17 +130,15 @@ export const fetchAndStoreRolePermissions = async (roleName) => {
       return null;
     }
 
-    const permissions = (matched.permissions || matched.permissionNames || matched.claims || [])
-      .filter(Boolean)
-      .map((p) => String(p).trim());
+    const permissions = getRolePermissions(matched);
 
     const record = {
-      roleName: matched.roleName || matched.name || roleName,
+      roleName: matched.roleName || matched.name || targetRoleName,
       permissions,
-      canView: matched.canView === true || permissions.map((p) => p.toLowerCase()).includes("view"),
-      canCreate: matched.canCreate === true || permissions.map((p) => p.toLowerCase()).includes("create"),
-      canEdit: matched.canEdit === true || permissions.map((p) => p.toLowerCase()).includes("edit"),
-      canDelete: matched.canDelete === true || permissions.map((p) => p.toLowerCase()).includes("delete"),
+      canView: getRoleBoolean(matched, "canView") || permissions.includes("view"),
+      canCreate: getRoleBoolean(matched, "canCreate") || permissions.includes("create"),
+      canEdit: getRoleBoolean(matched, "canEdit") || permissions.includes("edit"),
+      canDelete: getRoleBoolean(matched, "canDelete") || permissions.includes("delete"),
       raw: matched,
     };
 
@@ -80,8 +150,12 @@ export const fetchAndStoreRolePermissions = async (roleName) => {
   }
 };
 
-export default {
+const authorization = {
   fetchAndStoreRolePermissions,
+  canUsePermission,
+  getStoredRolePermissionRecord,
   getStoredRolePermissions,
   hasPermission,
 };
+
+export default authorization;
