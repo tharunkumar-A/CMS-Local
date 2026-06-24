@@ -109,18 +109,7 @@ export const validateGmail = (value, label = "Email", { strict = true } = {}) =>
   if (required) return required;
   const email = String(value).trim();
   if (!GMAIL_PATTERN.test(email)) return `${label} must be a valid @gmail.com address.`;
-  if (!strict) return "";
-
-  const localPart = email.split("@")[0] || "";
-  const lettersOnly = localPart.replace(/[^A-Za-z]/g, "");
-  const looksRandom =
-    lettersOnly.length < 4 ||
-    REPEATED_LETTER_PATTERN.test(localPart) ||
-    AWKWARD_EMAIL_LOCAL_PATTERN.test(lettersOnly);
-
-  return EMAIL_WORD_PATTERN.test(localPart) || !looksRandom
-    ? ""
-    : `${label} must be valid, not random characters.`;
+  return "";
 };
 
 export const validateEmailCom = (value, label = "Email") => {
@@ -130,17 +119,7 @@ export const validateEmailCom = (value, label = "Email") => {
   const basicEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!basicEmail.test(text)) return `${label} must be a valid email address.`;
   if (!text.toLowerCase().endsWith(".com")) return `${label} must use a .com domain.`;
-
-  const localPart = text.split("@")[0] || "";
-  const lettersOnly = localPart.replace(/[^A-Za-z]/g, "");
-  const looksRandom =
-    lettersOnly.length < 4 ||
-    REPEATED_LETTER_PATTERN.test(localPart) ||
-    AWKWARD_EMAIL_LOCAL_PATTERN.test(lettersOnly);
-
-  return EMAIL_WORD_PATTERN.test(localPart) || !looksRandom
-    ? ""
-    : `${label} must be valid, not random characters.`;
+  return "";
 };
 
 export const validateMobile = (value, label = "Mobile number") => {
