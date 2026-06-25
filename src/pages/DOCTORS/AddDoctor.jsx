@@ -221,6 +221,10 @@ import { apiUrl } from "../../config/api";
 import { useToast } from "../../components/ToastProvider";
 import { getClinicDisplayName } from "../../utils/clinicDisplay";
 import {
+  canUsePermission,
+  fetchAndStoreRolePermissions,
+} from "../../utils/authorization";
+import {
   onlyAlpha,
   onlyIndianMobileValue,
   onlyNumberValue,
@@ -343,6 +347,14 @@ const uniqueByValue = (options) => {
   });
 };
 
+const formatFeeValue = (value) => {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+
+  const numberValue = Number(text);
+  return Number.isNaN(numberValue) ? text : numberValue.toFixed(2);
+};
+
 function AddDoctor() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -368,6 +380,9 @@ function AddDoctor() {
     useState(QUALIFICATION_OPTIONS);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsWarning, setOptionsWarning] = useState("");
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionRecord, setPermissionRecord] = useState(null);
+  const canCreateDoctor = !permissionsLoading && canUsePermission(permissionRecord, "create");
 
   useEffect(() => {
     let active = true;
@@ -438,6 +453,25 @@ function AddDoctor() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadPermissions = async () => {
+      setPermissionsLoading(true);
+      const record = await fetchAndStoreRolePermissions();
+      if (active) {
+        setPermissionRecord(record);
+        setPermissionsLoading(false);
+      }
+    };
+
+    loadPermissions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleChange = (event) => {
     const { name } = event.target;
     let { value } = event.target;
@@ -465,6 +499,13 @@ function AddDoctor() {
     setError("");
   };
 
+  const handleFeeBlur = () => {
+    setForm((previous) => ({
+      ...previous,
+      fees: formatFeeValue(previous.fees),
+    }));
+  };
+
   const parseErrorMessage = async (response) => {
     const fallback = "Unable to add doctor right now.";
 
@@ -484,18 +525,18 @@ function AddDoctor() {
     }
   };
 
-  const validateForm = () => {
+  const validateForm = (values = form) => {
     const nextErrors = {
-      name: validateAlpha(form.name, "Doctor name"),
-      specialization: validateAlpha(form.specialization, "Specialization"),
-      qualification: validateRequired(form.qualification, "Qualification"),
-      experience: validateNumeric(form.experience, "Experience", {
+      name: validateAlpha(values.name, "Doctor name"),
+      specialization: validateAlpha(values.specialization, "Specialization"),
+      qualification: validateRequired(values.qualification, "Qualification"),
+      experience: validateNumeric(values.experience, "Experience", {
         integer: true,
         max: 99,
       }),
-      fees: validateNumeric(form.fees, "Fees"),
-      email: validateGmail(form.email),
-      phone: validateMobile(form.phone, "Phone"),
+      fees: validateNumeric(values.fees, "Fees"),
+      email: validateGmail(values.email, 'Email', { strict: false }),
+      phone: validateMobile(values.phone, "Phone"),
     };
 
     Object.keys(nextErrors).forEach((key) => {
@@ -508,8 +549,25 @@ function AddDoctor() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const formattedForm = {
+      ...form,
+      fees: formatFeeValue(form.fees),
+    };
 
-    if (!validateForm()) {
+    if (formattedForm.fees !== form.fees) {
+      setForm(formattedForm);
+    }
+
+    if (!canCreateDoctor) {
+      const message = permissionsLoading
+        ? "Loading permissions. Please try again."
+        : "Create permission is disabled by Super Admin.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (!validateForm(formattedForm)) {
       setError("Please fix the highlighted fields.");
       toast.error("Please fix the highlighted fields.");
       return;
@@ -523,7 +581,7 @@ function AddDoctor() {
       specialization: form.specialization.trim(),
       experience: String(Number(form.experience) || 0),
       qualification: form.qualification.trim(),
-      consultationFee: Number(form.fees) || 0,
+      consultationFee: Number(formattedForm.fees) || 0,
       email: form.email.trim(),
       phoneNumber: form.phone.trim(),
       isActive: form.isActive === "true",
@@ -672,6 +730,7 @@ function AddDoctor() {
                 inputMode="decimal"
                 value={form.fees}
                 onChange={handleChange}
+                onBlur={handleFeeBlur}
                 className={`add-doctor-fee-input${fieldErrors.fees ? " is-invalid" : ""}`}
                 required
               />
@@ -703,7 +762,7 @@ function AddDoctor() {
                 value={form.phone}
                 onChange={handleChange}
                 inputMode="numeric"
-                pattern="^(?!([0-9])\1{9})[6-9][0-9]{9}$"
+                pattern="^(?!([0-9])\\1{9})[6-9][0-9]{9}$"
                 maxLength={10}
                 placeholder="10-digit Indian mobile number"
                 title="Enter a 10-digit Indian mobile number starting with 6-9 and not all identical digits"
@@ -742,7 +801,14 @@ function AddDoctor() {
             <button
               className="add-doctor-primary"
               type="submit"
-              disabled={saving}
+              disabled={saving || !canCreateDoctor}
+              title={
+                canCreateDoctor
+                  ? "Add doctor"
+                  : permissionsLoading
+                    ? "Loading permissions"
+                    : "Permission disabled by Super Admin"
+              }
             >
               {saving ? "Adding..." : "Add Doctor"}
             </button>

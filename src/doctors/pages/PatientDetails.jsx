@@ -768,7 +768,7 @@ function DocumentsPanel({ documents }) {
 function PreviousVisits({ visits, compact = false, onViewAll }) {
   return (
     <div className="pd-section-card">
-      <h4 className="pd-section-title">Previous Visits</h4>
+      <h4 className="pd-section-title">Visits</h4>
       {visits.length > 0 ? (
         visits.map((visit) => (
           <div

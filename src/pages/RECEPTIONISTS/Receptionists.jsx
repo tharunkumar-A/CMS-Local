@@ -11,15 +11,17 @@ import {
 } from "lucide-react";
 import "./Receptionists.css";
 import { apiUrl } from "../../config/api";
-import PasswordField from "../../components/PasswordField";
 import { useToast } from "../../components/ToastProvider";
+import {
+  canUsePermission,
+  fetchAndStoreRolePermissions,
+} from "../../utils/authorization";
 import {
   onlyAlpha,
   onlyIndianMobileValue,
   validateAlpha,
   validateGmail,
   validateMobile,
-  validateStrongPassword,
 } from "../../utils/validation";
 import {
   getClinicDisplayName,
@@ -55,7 +57,6 @@ const getEmptyForm = () => ({
   name: "",
   email: "",
   phone: "",
-  password: "",
 });
 
 const parseReceptionistsResponse = (data) => {
@@ -122,10 +123,19 @@ function Receptionists() {
   const [editingReceptionist, setEditingReceptionist] = useState(null);
   const [form, setForm] = useState(getEmptyForm());
   const [fieldErrors, setFieldErrors] = useState({});
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionRecord, setPermissionRecord] = useState(null);
 
   const hospitalId = getHospitalId();
   const clinicDisplayName =
     getStoredClinicName() || getClinicDisplayName({ hospitalId }, "Clinic");
+  const canCreateReceptionist = !permissionsLoading && canUsePermission(permissionRecord, "create");
+  const canEditReceptionist = !permissionsLoading && canUsePermission(permissionRecord, "edit");
+  const canDeleteReceptionist = !permissionsLoading && canUsePermission(permissionRecord, "delete");
+  const permissionDisabledTitle = permissionsLoading
+    ? "Loading permissions"
+    : "Permission disabled by Super Admin";
+
   const fetchReceptionists = async () => {
     setLoading(true);
     setError("");
@@ -157,6 +167,25 @@ function Receptionists() {
     fetchReceptionists();
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadPermissions = async () => {
+      setPermissionsLoading(true);
+      const record = await fetchAndStoreRolePermissions();
+      if (active) {
+        setPermissionRecord(record);
+        setPermissionsLoading(false);
+      }
+    };
+
+    loadPermissions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const filteredReceptionists = useMemo(() => {
     const value = searchText.trim().toLowerCase();
     if (!value) return receptionists;
@@ -169,6 +198,11 @@ function Receptionists() {
   }, [receptionists, searchText]);
 
   const openAddModal = () => {
+    if (!canCreateReceptionist) {
+      toast.error("Create permission is disabled by Super Admin.");
+      return;
+    }
+
     setEditingReceptionist(null);
     setForm(getEmptyForm());
     setFieldErrors({});
@@ -178,12 +212,16 @@ function Receptionists() {
   };
 
   const openEditModal = (receptionist) => {
+    if (!canEditReceptionist) {
+      toast.error("Edit permission is disabled by Super Admin.");
+      return;
+    }
+
     setEditingReceptionist(receptionist);
     setForm({
       name: receptionist?.name || "",
       email: receptionist?.email || "",
       phone: receptionist?.phone || "",
-      password: "",
     });
     setFieldErrors({});
     setError("");
@@ -230,9 +268,6 @@ function Receptionists() {
     nextErrors.name = validateAlpha(form.name, "Name");
     nextErrors.email = validateGmail(form.email);
     nextErrors.phone = validateMobile(form.phone, "Phone");
-    nextErrors.password = validateStrongPassword(form.password, "Password", {
-      required: !editingReceptionist,
-    });
 
     if (!hospitalId) {
       nextErrors.form = "Clinic not found. Please login again.";
@@ -263,16 +298,18 @@ function Receptionists() {
       name: form.name.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
-      password: form.password,
       hospitalId,
-      hospitalName: clinicDisplayName,
-      clinicName: clinicDisplayName,
-      adminEmail: localStorage.getItem("adminEmail") || "",
-      adminName: localStorage.getItem("adminName") || "",
     };
 
     try {
       const isEditing = Boolean(editingReceptionist?.id);
+      if (isEditing && !canEditReceptionist) {
+        throw new Error("Edit permission is disabled by Super Admin.");
+      }
+      if (!isEditing && !canCreateReceptionist) {
+        throw new Error("Create permission is disabled by Super Admin.");
+      }
+
       const response = await fetch(
         isEditing
           ? `${RECEPTIONIST_API}/${editingReceptionist.id}`
@@ -319,6 +356,10 @@ function Receptionists() {
 
   const handleDelete = async (receptionist) => {
     if (!receptionist?.id || deletingId) return;
+    if (!canDeleteReceptionist) {
+      toast.error("Delete permission is disabled by Super Admin.");
+      return;
+    }
 
     const shouldDelete = window.confirm(
       `Delete receptionist ${receptionist.name || ""}?`
@@ -385,7 +426,8 @@ function Receptionists() {
             type="button"
             className="receptionists-primary-button"
             onClick={openAddModal}
-            title="Add receptionist"
+            disabled={!canCreateReceptionist}
+            title={canCreateReceptionist ? "Add receptionist" : permissionDisabledTitle}
           >
             <Plus size={16} />
             Add Receptionist
@@ -469,8 +511,8 @@ function Receptionists() {
                   type="button"
                   className="receptionists-action-button"
                   onClick={() => openEditModal(receptionist)}
-                  disabled={isDeleting}
-                  title="Edit receptionist"
+                  disabled={!canEditReceptionist || isDeleting}
+                  title={canEditReceptionist ? "Edit receptionist" : permissionDisabledTitle}
                 >
                   <Pencil size={14} />
                 </button>
@@ -479,8 +521,8 @@ function Receptionists() {
                   type="button"
                   className="receptionists-action-button receptionists-action-danger"
                   onClick={() => handleDelete(receptionist)}
-                  disabled={isDeleting}
-                  title="Delete receptionist"
+                  disabled={!canDeleteReceptionist || isDeleting}
+                  title={canDeleteReceptionist ? "Delete receptionist" : permissionDisabledTitle}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -563,7 +605,7 @@ function Receptionists() {
                   value={form.phone}
                   onChange={(event) => updateField("phone", event.target.value)}
                   inputMode="numeric"
-                  pattern="^(?!([0-9])\1{9})[6-9][0-9]{9}$"
+                  pattern="^(?!([0-9])\\1{9})[6-9][0-9]{9}$"
                   maxLength={10}
                   placeholder="10-digit Indian mobile number"
                   title="Enter a 10-digit Indian mobile number starting with 6-9 and not all identical digits"
@@ -573,26 +615,6 @@ function Receptionists() {
                 {fieldErrors.phone ? (
                   <span className="receptionists-field-error">
                     {fieldErrors.phone}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className="receptionists-field">
-                <label htmlFor="receptionist-password">Password</label>
-                <PasswordField
-                  id="receptionist-password"
-                  value={form.password}
-                  onChange={(event) => updateField("password", event.target.value)}
-                  className={fieldErrors.password ? "is-invalid" : ""}
-                  placeholder={
-                    editingReceptionist ? "Leave blank if unchanged" : ""
-                  }
-                  disabled={saving}
-                  autoComplete="new-password"
-                />
-                {fieldErrors.password ? (
-                  <span className="receptionists-field-error">
-                    {fieldErrors.password}
                   </span>
                 ) : null}
               </div>
@@ -615,7 +637,12 @@ function Receptionists() {
                 <button
                   type="submit"
                   className="receptionists-save-button"
-                  disabled={saving}
+                  disabled={
+                    saving ||
+                    (editingReceptionist
+                      ? !canEditReceptionist
+                      : !canCreateReceptionist)
+                  }
                 >
                   <CheckCircle size={16} />
                   {saving

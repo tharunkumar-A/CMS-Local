@@ -37,6 +37,9 @@ const getInitials = (name) =>
 
 const getDisplayDate = (value) => formatDateMMDDYYYY(value, emptyValue);
 
+const pickVital = (item = {}, fallback = {}, key) =>
+  item[key] || item.vitals?.[key] || fallback[key] || fallback.vitals?.[key] || "";
+
 const normalizeAppointment = (item, fallback = {}) => {
   if (!item) return null;
 
@@ -56,18 +59,12 @@ const normalizeAppointment = (item, fallback = {}) => {
       item.symptoms ||
       fallback.chiefComplaints ||
       "",
-    bloodPressure:
-      item.bloodPressure || fallback.bloodPressure || "",
-    sugarLevel:
-      item.sugarLevel || fallback.sugarLevel || "",
-    temperature:
-      item.temperature || fallback.temperature || "",
-    weight:
-      item.weight || fallback.weight || "",
-    pulseRate:
-      item.pulseRate || fallback.pulseRate || "",
-    respiratoryRate:
-      item.respiratoryRate || fallback.respiratoryRate || "",
+    bloodPressure: pickVital(item, fallback, "bloodPressure"),
+    sugarLevel: pickVital(item, fallback, "sugarLevel"),
+    temperature: pickVital(item, fallback, "temperature"),
+    weight: pickVital(item, fallback, "weight"),
+    pulseRate: pickVital(item, fallback, "pulseRate"),
+    respiratoryRate: pickVital(item, fallback, "respiratoryRate"),
     status: item.status || fallback.status || "Waiting",
   };
 };
@@ -98,7 +95,7 @@ const getFallbackAppointment = (appointments) =>
 function Consultation() {
   const navigate = useNavigate();
   const location = useLocation();
-  const routeState = location.state || {};
+  const routeState = React.useMemo(() => location.state || {}, [location.state]);
 
   const [step, setStep] = useState(1);
   const [appointment, setAppointment] = useState(null);
@@ -109,7 +106,7 @@ function Consultation() {
   const [message, setMessage] = useState("");
   const [diagnosisOptions, setDiagnosisOptions] = useState([]);
   const [form, setForm] = useState({
-    complaints: "",
+    complaintsChoice: "",
     diagnosis: "",
     bp: "",
     sugar: "",
@@ -235,11 +232,13 @@ function Consultation() {
           }
         }
 
+        const appointmentComplaint = hydratedAppointment.chiefComplaints || "";
+
         setAppointment(hydratedAppointment);
         setOverview(patientOverview);
         setStep(getStepFromStatus(hydratedAppointment.status));
         setForm({
-          complaints: hydratedAppointment.chiefComplaints || "",
+          complaintsChoice: appointmentComplaint,
           diagnosis: savedConsultation?.diagnosis || "",
           bp: hydratedAppointment.bloodPressure || "",
           sugar: hydratedAppointment.sugarLevel || "",
@@ -258,7 +257,7 @@ function Consultation() {
     };
 
     loadConsultation();
-  }, [routeState.appointmentId, routeState.patientId]);
+  }, [routeState]);
 
   const patient = useMemo(() => {
     if (!appointment) return null;
@@ -303,16 +302,22 @@ function Consultation() {
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
+      const requestBody = {
+        appointmentId: Number(appointment.appointmentId),
+        patientId: Number(appointment.patientId),
+        doctorId: appointment.doctorId || appointment.doctor?.id || undefined,
+        diagnosis: form.diagnosis.trim(),
+        clinicalNotes: form.notes.trim(),
+      };
+
+      if (form.complaintsChoice.trim()) {
+        requestBody.chiefComplaints = form.complaintsChoice.trim();
+      }
+
       const response = await fetch(CONSULTATION_API, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          appointmentId: Number(appointment.appointmentId),
-          patientId: Number(appointment.patientId),
-          doctorId: appointment.doctorId || appointment.doctor?.id || undefined,
-          diagnosis: form.diagnosis.trim(),
-          clinicalNotes: form.notes.trim(),
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -450,12 +455,12 @@ function Consultation() {
         <section className="cn-form-panel">
           <div className="cn-field">
             <label className="cn-label">Chief Complaints / Symptoms *</label>
-            <textarea
-              className="cn-textarea"
-              name="complaints"
-              value={form.complaints}
-              onChange={handleChange}
-              rows={3}
+            <input
+              className="cn-input"
+              name="complaintsChoice"
+              value={form.complaintsChoice}
+              readOnly
+              placeholder="No complaint entered by receptionist"
             />
           </div>
 

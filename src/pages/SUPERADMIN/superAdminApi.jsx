@@ -38,6 +38,7 @@ export const SUPER_ADMIN_API = {
 
 const LOCAL_NOTIFICATIONS_KEY = "superadmin_notifications";
 const LOCAL_AUDIT_LOGS_KEY = "superadmin_audit_logs";
+const LOCAL_ROLE_OVERRIDES_KEY = "superadmin_role_overrides";
 const readLocalList = (key) => {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
@@ -55,6 +56,77 @@ const prependLocalItem = (key, item) => {
   const nextItems = [item, ...readLocalList(key)].slice(0, 100);
   writeLocalList(key, nextItems);
   return item;
+};
+
+const readLocalRoleOverrides = () => {
+  try {
+    const value = JSON.parse(localStorage.getItem(LOCAL_ROLE_OVERRIDES_KEY) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeLocalRoleOverrides = (overrides) => {
+  localStorage.setItem(LOCAL_ROLE_OVERRIDES_KEY, JSON.stringify(overrides));
+};
+
+const getRoleStorageKeys = (role = {}) =>
+  Array.from(
+    new Set(
+      ["id", "roleId", "_id", "roleName", "name", "key"]
+        .map((field) => String(role?.[field] || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+const applyRoleOverrides = (role = {}) => {
+  const overrides = readLocalRoleOverrides();
+  const override = getRoleStorageKeys(role)
+    .map((key) => overrides[key])
+    .find(Boolean);
+
+  return override ? { ...role, ...override } : role;
+};
+
+const saveRoleOverride = (role = {}, override = {}) => {
+  const keys = getRoleStorageKeys(role);
+  if (!keys.length) return;
+
+  const overrides = readLocalRoleOverrides();
+  const roleName = String(pick(role, ["roleName", "name"], "")).trim();
+  const nextOverride = {
+    ...(roleName ? { roleName, name: roleName } : {}),
+    ...override,
+  };
+  const nextOverrides = { ...overrides };
+
+  keys.forEach((key) => {
+    nextOverrides[key] = {
+      ...nextOverrides[key],
+      ...nextOverride,
+    };
+  });
+
+  writeLocalRoleOverrides(nextOverrides);
+};
+
+const deleteRoleOverride = (role = {}) => {
+  const keys = getRoleStorageKeys(role);
+  if (!keys.length) return;
+
+  const overrides = readLocalRoleOverrides();
+  let changed = false;
+
+  keys.forEach((key) => {
+    if (key in overrides) {
+      delete overrides[key];
+      changed = true;
+    }
+  });
+
+  if (!changed) return;
+  writeLocalRoleOverrides(overrides);
 };
 
 const asArray = (value) => {

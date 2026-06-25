@@ -7,7 +7,6 @@ import {
   Trash2,
   Calendar,
   X,
-  Camera,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AuthImage, {
@@ -15,6 +14,10 @@ import AuthImage, {
 } from "../../utils/AuthImage";
 import { apiUrl } from "../../config/api";
 import { useToast } from "../../components/ToastProvider";
+import {
+  canUsePermission,
+  fetchAndStoreRolePermissions,
+} from "../../utils/authorization";
 import {
   onlyAlpha,
   onlyIndianMobileValue,
@@ -90,6 +93,14 @@ const getImageUrl = (entity = {}) => String(entity.imageUrl || "").trim();
 const getDoctorFee = (doctor = {}) =>
   doctor.consultationFee ?? doctor.fees ?? doctor.Fees ?? "";
 
+const formatFeeValue = (value) => {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+
+  const numberValue = Number(text);
+  return Number.isNaN(numberValue) ? text : numberValue.toFixed(2);
+};
+
 const getDoctorPhone = (doctor = {}) =>
   doctor.phoneNumber ?? doctor.phone ?? doctor.Phone ?? "";
 
@@ -163,7 +174,7 @@ const validateEditForm = (form) => {
     integer: true,
   });
   errors.fees = validateNumeric(form.fees, "Fees");
-  errors.email = validateGmail(form.email);
+  errors.email = validateGmail(form.email, 'Email', { strict: false });
   errors.phone = validateMobile(form.phone, "Phone");
   errors.password = validateStrongPassword(form.password, "Password", {
     required: false,
@@ -227,6 +238,8 @@ function Doctors() {
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionRecord, setPermissionRecord] = useState(null);
 
 
   const [editingDoctor, setEditingDoctor] = useState(null);
@@ -241,8 +254,19 @@ function Doctors() {
   const [toggleLoadingId, setToggleLoadingId] = useState(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState(null);
   const clinicName = getClinicDisplayName({}, "Clinic");
+  const canCreateDoctor = !permissionsLoading && canUsePermission(permissionRecord, "create");
+  const canEditDoctor = !permissionsLoading && canUsePermission(permissionRecord, "edit");
+  const canDeleteDoctor = !permissionsLoading && canUsePermission(permissionRecord, "delete");
+  const permissionDisabledTitle = permissionsLoading
+    ? "Loading permissions"
+    : "Permission disabled by Super Admin";
 
   const openAddDoctor = () => {
+    if (!canCreateDoctor) {
+      toast.error("Create permission is disabled by Super Admin.");
+      return;
+    }
+
     navigate("/doctors/add");
   };
 
@@ -350,6 +374,25 @@ function Doctors() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+
+    const loadPermissions = async () => {
+      setPermissionsLoading(true);
+      const record = await fetchAndStoreRolePermissions();
+      if (active) {
+        setPermissionRecord(record);
+        setPermissionsLoading(false);
+      }
+    };
+
+    loadPermissions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (editImagePreview.startsWith("blob:")) {
         URL.revokeObjectURL(editImagePreview);
@@ -382,6 +425,10 @@ function Doctors() {
 
   const openEditDoctor = (doctor) => {
     if (!doctor?.id) return;
+    if (!canEditDoctor) {
+      toast.error("Edit permission is disabled by Super Admin.");
+      return;
+    }
 
     if (editImagePreview.startsWith("blob:")) {
       URL.revokeObjectURL(editImagePreview);
@@ -442,6 +489,13 @@ function Doctors() {
     setEditError("");
   };
 
+  const handleEditFeeBlur = () => {
+    setEditForm((previous) => ({
+      ...previous,
+      fees: formatFeeValue(previous.fees),
+    }));
+  };
+
   const handleEditImageChange = (event) => {
     const nextFile = event.target.files?.[0];
     if (!nextFile) return;
@@ -475,6 +529,11 @@ function Doctors() {
     event.preventDefault();
 
     if (!editingDoctor?.id) return;
+    if (!canEditDoctor) {
+      setEditError("Edit permission is disabled by Super Admin.");
+      toast.error("Edit permission is disabled by Super Admin.");
+      return;
+    }
 
     const validationErrors = {
       ...validateEditForm(editForm),
@@ -530,6 +589,10 @@ function Doctors() {
 
   const handleToggleDoctorStatus = async (doctor) => {
     if (!doctor?.id) return;
+    if (!canEditDoctor) {
+      toast.error("Edit permission is disabled by Super Admin.");
+      return;
+    }
 
     const nextIsActive = !getDoctorIsActive(doctor);
 
@@ -576,6 +639,10 @@ function Doctors() {
 
   const handleDeleteDoctor = async (doctorId) => {
     if (!doctorId) return;
+    if (!canDeleteDoctor) {
+      toast.error("Delete permission is disabled by Super Admin.");
+      return;
+    }
 
     const shouldDelete = window.confirm("Delete this doctor?");
     if (!shouldDelete) return;
@@ -636,7 +703,8 @@ function Doctors() {
           <button
             className="doctors-btn doctors-btn-primary"
             onClick={openAddDoctor}
-            title="Add doctor"
+            disabled={!canCreateDoctor}
+            title={canCreateDoctor ? "Add doctor" : permissionDisabledTitle}
           >
             <Plus size={16} /> Add Doctor
           </button>
@@ -741,8 +809,8 @@ function Doctors() {
                   type="button"
                   className="doctors-status-button"
                   onClick={() => handleToggleDoctorStatus(doc)}
-                  disabled={!doc.id || isStatusUpdating || isDeleting}
-                  title="Toggle status"
+                  disabled={!doc.id || !canEditDoctor || isStatusUpdating || isDeleting}
+                  title={canEditDoctor ? "Toggle status" : permissionDisabledTitle}
                 >
                   <span
                     className={`doctors-status ${isActive ? "doctors-status-active" : "doctors-status-inactive"
@@ -766,8 +834,8 @@ function Doctors() {
                   type="button"
                   className="doctors-action-icon"
                   onClick={() => openEditDoctor(doc)}
-                  disabled={!doc.id || isDeleting}
-                  title="Edit doctor"
+                  disabled={!doc.id || !canEditDoctor || isDeleting}
+                  title={canEditDoctor ? "Edit doctor" : permissionDisabledTitle}
                 >
                   <Pencil size={14} />
                 </button>
@@ -776,8 +844,8 @@ function Doctors() {
                   type="button"
                   className="doctors-action-icon doctors-action-icon-delete"
                   onClick={() => handleDeleteDoctor(doc.id)}
-                  disabled={!doc.id || isDeleting || isStatusUpdating}
-                  title="Delete doctor"
+                  disabled={!doc.id || !canDeleteDoctor || isDeleting || isStatusUpdating}
+                  title={canDeleteDoctor ? "Delete doctor" : permissionDisabledTitle}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -821,23 +889,7 @@ function Doctors() {
                       display: "flex",
                     }}
                   />
-                  <button
-                    type="button"
-                    className="doctor-edit-image-btn"
-                    onClick={() => editImageInputRef.current?.click()}
-                    aria-label="Upload doctor image"
-                  >
-                    <Camera size={14} />
-                  </button>
                 </div>
-                <input
-                  ref={editImageInputRef}
-                  type="file"
-                  name="Image"
-                  accept="image/*"
-                  className="doctor-edit-image-input"
-                  onChange={handleEditImageChange}
-                />
               </div>
 
               <div className="doctor-edit-grid">
@@ -899,11 +951,11 @@ function Doctors() {
                   <input
                     id="edit-fees"
                     name="fees"
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={editForm.fees}
                     onChange={handleEditFieldChange}
+                    onBlur={handleEditFeeBlur}
                     className={`doctor-edit-fee-input${editFieldErrors.fees ? " is-invalid" : ""}`}
                     aria-invalid={Boolean(editFieldErrors.fees)}
                   />
@@ -923,7 +975,7 @@ function Doctors() {
                     value={editForm.phone}
                     onChange={handleEditFieldChange}
                     inputMode="numeric"
-                    pattern="^(?!([0-9])\1{9})[6-9][0-9]{9}$"
+                    pattern="^(?!([0-9])\\1{9})[6-9][0-9]{9}$"
                     maxLength={10}
                     placeholder="10-digit Indian mobile number"
                     title="Enter a 10-digit Indian mobile number starting with 6-9 and not all identical digits"

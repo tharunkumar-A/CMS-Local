@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "../../components/ToastProvider";
 import { formatToday, parseList, requestJson } from "../receptionApi";
 import { getReceptionistProfile } from "../receptionSession";
+import { validateText } from "../../utils/validation";
 
 const getSlotStart = (slot) => String(slot || "").split(" - ")[0].trim();
 
@@ -68,6 +69,116 @@ const isActiveDoctor = (doctor = {}) => {
   return !status || status === "active";
 };
 
+const CHIEF_COMPLAINT_OPTIONS = [
+  "Fever",
+  "Cough",
+  "Headache",
+  "Cold",
+  "Body pain",
+  "Stomach pain",
+  "Chest pain",
+  "Back pain",
+  "Vomiting",
+  "Dizziness",
+  "Other",
+];
+
+const VITAL_FIELDS = [
+  {
+    name: "bloodPressure",
+    label: "Blood Pressure",
+    unit: "mmHg",
+    type: "bloodPressure",
+    placeholder: "120/80",
+  },
+  {
+    name: "sugarLevel",
+    label: "Sugar Level",
+    unit: "mg/dL",
+    type: "decimal",
+    placeholder: "100",
+  },
+  {
+    name: "temperature",
+    label: "Temperature",
+    unit: "F",
+    type: "decimal",
+    placeholder: "98.6",
+  },
+  {
+    name: "weight",
+    label: "Weight",
+    unit: "kg",
+    type: "decimal",
+    placeholder: "70",
+  },
+  {
+    name: "pulseRate",
+    label: "Pulse Rate",
+    unit: "bpm",
+    type: "integer",
+    placeholder: "72",
+  },
+  {
+    name: "respiratoryRate",
+    label: "Respiratory Rate",
+    unit: "breaths/min",
+    type: "integer",
+    placeholder: "16",
+  },
+];
+
+const vitalFieldByName = VITAL_FIELDS.reduce((fields, field) => {
+  fields[field.name] = field;
+  return fields;
+}, {});
+
+const sanitizeVitalValue = (value, type) => {
+  const text = String(value || "");
+
+  if (type === "bloodPressure") {
+    return text
+      .replace(/[^\d/]/g, "")
+      .replace(/\/{2,}/g, "/")
+      .replace(/^(\d*\/\d*)\/.*$/, "$1");
+  }
+
+  if (type === "integer") {
+    return text.replace(/\D/g, "");
+  }
+
+  return text
+    .replace(/[^\d.]/g, "")
+    .replace(/(\..*)\./g, "$1");
+};
+
+const validateVitalValue = (value, field) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  if (field.type === "bloodPressure") {
+    return /^\d{2,3}\/\d{2,3}$/.test(text)
+      ? ""
+      : "Enter blood pressure like 120/80.";
+  }
+
+  if (field.type === "integer") {
+    return /^\d+$/.test(text) ? "" : `${field.label} must be a number.`;
+  }
+
+  return /^\d+(\.\d+)?$/.test(text) ? "" : `${field.label} must be a number.`;
+};
+
+const validateChiefComplaintsLive = (value) => {
+  const text = String(value || "").trim();
+  return text ? validateText(text, "Chief complaints") : "";
+};
+
+const appendUnit = (value, unit) => {
+  const text = String(value || "").trim();
+  return text ? `${text} ${unit}` : "";
+};
+
 function ReceptionAppointments() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -82,6 +193,7 @@ function ReceptionAppointments() {
   const [slotLoading, setSlotLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [message, setMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [form, setForm] = useState({
     patientId: "",
     doctorId: "",
@@ -212,7 +324,36 @@ function ReceptionAppointments() {
       return;
     }
 
+    const nextFieldErrors = VITAL_FIELDS.reduce((errors, field) => {
+      const error = validateVitalValue(form[field.name], field);
+      if (error) errors[field.name] = error;
+      return errors;
+    }, {});
+
+    const chiefComplaintsError = validateText(
+      form.chiefComplaints,
+      "Chief complaints"
+    );
+    if (chiefComplaintsError) {
+      nextFieldErrors.chiefComplaints = chiefComplaintsError;
+    }
+
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setMessage("Please fix the highlighted fields.");
+      toast.error("Please fix the highlighted fields.");
+      return;
+    }
+
     const selectedSlotStart = getSlotStart(selectedSlot);
+    const vitals = {
+      bloodPressure: appendUnit(form.bloodPressure, vitalFieldByName.bloodPressure.unit),
+      sugarLevel: appendUnit(form.sugarLevel, vitalFieldByName.sugarLevel.unit),
+      temperature: appendUnit(form.temperature, vitalFieldByName.temperature.unit),
+      weight: appendUnit(form.weight, vitalFieldByName.weight.unit),
+      pulseRate: appendUnit(form.pulseRate, vitalFieldByName.pulseRate.unit),
+      respiratoryRate: appendUnit(form.respiratoryRate, vitalFieldByName.respiratoryRate.unit),
+    };
     const body = {
       doctorId: Number(form.doctorId),
       patientId: Number(form.patientId),
@@ -222,13 +363,20 @@ function ReceptionAppointments() {
       startTime: selectedSlotStart ? `${selectedSlotStart}:00` : "",
       time: selectedSlot,
       status: "Scheduled",
-      chiefComplaints: form.chiefComplaints,
-      bloodPressure: form.bloodPressure,
-      sugarLevel: form.sugarLevel,
-      temperature: form.temperature,
-      weight: form.weight,
-      pulseRate: form.pulseRate,
-      respiratoryRate: form.respiratoryRate,
+      chiefComplaints: form.chiefComplaints.trim(),
+      bloodPressure: vitals.bloodPressure,
+      bloodPressureUnit: vitalFieldByName.bloodPressure.unit,
+      sugarLevel: vitals.sugarLevel,
+      sugarLevelUnit: vitalFieldByName.sugarLevel.unit,
+      temperature: vitals.temperature,
+      temperatureUnit: vitalFieldByName.temperature.unit,
+      weight: vitals.weight,
+      weightUnit: vitalFieldByName.weight.unit,
+      pulseRate: vitals.pulseRate,
+      pulseRateUnit: vitalFieldByName.pulseRate.unit,
+      respiratoryRate: vitals.respiratoryRate,
+      respiratoryRateUnit: vitalFieldByName.respiratoryRate.unit,
+      vitals,
     };
 
     try {
@@ -244,7 +392,26 @@ function ReceptionAppointments() {
     }
   };
 
-  const setField = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
+  const setField = (name, value) => {
+    const vitalField = vitalFieldByName[name];
+    const nextValue = vitalField
+      ? sanitizeVitalValue(value, vitalField.type)
+      : value;
+
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
+
+    if (vitalField) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [name]: validateVitalValue(nextValue, vitalField),
+      }));
+    } else if (name === "chiefComplaints") {
+      setFieldErrors((prev) => ({
+        ...prev,
+        chiefComplaints: validateChiefComplaintsLive(nextValue),
+      }));
+    }
+  };
 
   return (
     <section className="rc-page">
@@ -298,18 +465,44 @@ function ReceptionAppointments() {
             <span>Date</span>
             <input type="date" value={form.date} onChange={(e) => setField("date", e.target.value)} />
           </label>
-          {[
-            "chiefComplaints",
-            "bloodPressure",
-            "sugarLevel",
-            "temperature",
-            "weight",
-            "pulseRate",
-            "respiratoryRate",
-          ].map((field) => (
-            <label key={field}>
-              <span>{field.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}</span>
-              <input value={form[field]} onChange={(e) => setField(field, e.target.value)} />
+          <label>
+            <span>Chief Complaints</span>
+            <input
+              list="chief-complaint-options"
+              value={form.chiefComplaints}
+              onChange={(e) => setField("chiefComplaints", e.target.value)}
+              placeholder="Select or type complaint"
+              autoComplete="off"
+              className={fieldErrors.chiefComplaints ? "is-invalid" : ""}
+            />
+            <datalist id="chief-complaint-options">
+              {CHIEF_COMPLAINT_OPTIONS.map((complaint) => (
+                <option key={complaint} value={complaint} />
+              ))}
+            </datalist>
+            {fieldErrors.chiefComplaints ? (
+              <small className="rc-field-error">
+                {fieldErrors.chiefComplaints}
+              </small>
+            ) : null}
+          </label>
+
+          {VITAL_FIELDS.map((field) => (
+            <label key={field.name}>
+              <span>{field.label}</span>
+              <div className="rc-unit-input">
+                <input
+                  value={form[field.name]}
+                  onChange={(e) => setField(field.name, e.target.value)}
+                  placeholder={field.placeholder}
+                  inputMode={field.type === "bloodPressure" ? "numeric" : "decimal"}
+                  className={fieldErrors[field.name] ? "is-invalid" : ""}
+                />
+                <span>{field.unit}</span>
+              </div>
+              {fieldErrors[field.name] ? (
+                <small className="rc-field-error">{fieldErrors[field.name]}</small>
+              ) : null}
             </label>
           ))}
         </div>
