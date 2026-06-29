@@ -5,11 +5,12 @@ import { parseList, requestJson } from "../receptionApi";
 import { useToast } from "../../components/ToastProvider";
 import {
   buildAddress,
+  buildAddressPayload,
   emptyAddressParts,
   onlyPincodeValue,
   parseAddress,
   validateAddressParts,
-} from "../../utils/address";
+} from "../../utils/address.jsx";
 import {
   fetchPincodeLocation,
 } from "../../utils/pincodeLocation";
@@ -43,6 +44,29 @@ const emptyForm = {
   gender: "",
   address: "",
   addressParts: emptyAddressParts,
+};
+
+const getPatientAddressParts = (patient = {}) => {
+  if (patient.addressParts && Object.keys(patient.addressParts).length) {
+    return {
+      ...emptyAddressParts,
+      ...patient.addressParts,
+    };
+  }
+
+  return {
+    streetVillage: String(patient.streetVillage || patient.Street || patient.street || "").trim(),
+    area: String(patient.area || patient.Area || patient.locality || patient.Locality || patient.town || patient.Town || "").trim(),
+    city: String(patient.city || patient.City || "").trim(),
+    state: String(patient.state || patient.State || "").trim(),
+    country: String(patient.country || patient.Country || INDIA_COUNTRY).trim() || INDIA_COUNTRY,
+    pincode: String(patient.pincode || patient.PostalCode || patient.postalCode || "").trim(),
+  };
+};
+
+const getPatientAddress = (patient = {}) => {
+  const addressParts = getPatientAddressParts(patient);
+  return String(patient.address || "").trim() || buildAddress(addressParts);
 };
 
 const bloodGroupOptions = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -101,19 +125,23 @@ const isDeletedPatient = (patient = {}) => {
   );
 };
 
-const toPatientPayload = (patient = {}, overrides = {}) => ({
-  name: String(patient.name || "").trim(),
-  email: String(patient.email || "").trim(),
-  phone: String(patient.phone || "").trim(),
-  age: Number(patient.age) || 0,
-  dateOfBirth: getPatientDateOfBirth(patient),
-  bloodGroup: String(patient.bloodGroup || "").trim(),
-  emergencyContactName: String(patient.emergencyContactName || "").trim(),
-  emergencyContactPhone: String(patient.emergencyContactPhone || "").trim(),
-  gender: patient.gender || "",
-  address: String(patient.address || "").trim(),
-  ...overrides,
-});
+const toPatientPayload = (patient = {}, overrides = {}) => {
+  const addressParts = getPatientAddressParts(patient);
+  return {
+    name: String(patient.name || "").trim(),
+    email: String(patient.email || "").trim(),
+    phone: String(patient.phone || "").trim(),
+    age: Number(patient.age) || 0,
+    dateOfBirth: getPatientDateOfBirth(patient),
+    bloodGroup: String(patient.bloodGroup || "").trim(),
+    emergencyContactName: String(patient.emergencyContactName || "").trim(),
+    emergencyContactPhone: String(patient.emergencyContactPhone || "").trim(),
+    gender: patient.gender || "",
+    address: String(patient.address || "").trim(),
+    ...buildAddressPayload(addressParts),
+    ...overrides,
+  };
+};
 
 function ReceptionPatients() {
   const navigate = useNavigate();
@@ -160,6 +188,7 @@ function ReceptionPatients() {
   };
 
   const openEdit = (patient) => {
+    const addressParts = getPatientAddressParts(patient);
     setForm({
       id: patient.id,
       name: patient.name || "",
@@ -171,8 +200,8 @@ function ReceptionPatients() {
       emergencyContactName: patient.emergencyContactName || "",
       emergencyContactPhone: patient.emergencyContactPhone || "",
       gender: patient.gender || "",
-      address: patient.address || "",
-      addressParts: parseAddress(patient.address || ""),
+      address: getPatientAddress(patient),
+      addressParts,
     });
     setFieldErrors({});
     setModal("edit");
@@ -200,7 +229,7 @@ function ReceptionPatients() {
         addressParts.pincode = "";
       }
 
-      if (name === "pincode") {
+      if (name === "pincode" && previousParts.pincode !== nextValue) {
         addressParts.area = "";
       }
 
@@ -219,6 +248,14 @@ function ReceptionPatients() {
     }));
     setMessage("");
   };
+
+  useEffect(() => {
+    const addressParts = form.addressParts || emptyAddressParts;
+    const nextAddress = buildAddress(addressParts);
+    if (form.address !== nextAddress) {
+      setForm((current) => ({ ...current, address: nextAddress }));
+    }
+  }, [form.addressParts]);
 
   useEffect(() => {
     const pincode = form.addressParts?.pincode || "";
@@ -241,7 +278,6 @@ function ReceptionPatients() {
             area: previousParts.area || location.area,
             city: location.city || previousParts.city,
             state: location.state || previousParts.state,
-            streetVillage: previousParts.streetVillage || location.village || location.area,
             country: location.country || INDIA_COUNTRY,
             pincode,
           };
@@ -435,7 +471,8 @@ function ReceptionPatients() {
                     setForm({
                       ...patient,
                       dateOfBirth: getPatientDateOfBirth(patient),
-                      addressParts: parseAddress(patient.address || ""),
+                      address: getPatientAddress(patient),
+                      addressParts: getPatientAddressParts(patient),
                     });
                     setModal("view");
                   }}
@@ -541,6 +578,21 @@ function ReceptionPatients() {
                 <span>Address</span>
                 <div className="rc-address-grid">
                   <label>
+                    <span>Pincode</span>
+                    <input
+                      value={form.addressParts?.pincode || ""}
+                      disabled={modal === "view"}
+                      className={fieldErrors["address.pincode"] ? "is-invalid" : ""}
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(event) => updateAddressField("pincode", event.target.value)}
+                    />
+                    {fieldErrors["address.pincode"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.pincode"]}</small>
+                    ) : null}
+                  </label>
+
+                  <label>
                     <span>Street/Village Name</span>
                     <input
                       value={form.addressParts?.streetVillage || ""}
@@ -550,26 +602,6 @@ function ReceptionPatients() {
                     />
                     {fieldErrors["address.streetVillage"] ? (
                       <small className="rc-field-error">{fieldErrors["address.streetVillage"]}</small>
-                    ) : null}
-                  </label>
-
-                  <label>
-                    <span>State</span>
-                    <select
-                      value={form.addressParts?.state || ""}
-                      disabled={modal === "view"}
-                      className={fieldErrors["address.state"] ? "is-invalid" : ""}
-                      onChange={(event) => updateAddressField("state", event.target.value)}
-                    >
-                      <option value="">Select State</option>
-                      {INDIAN_STATES.map((state) => (
-                        <option key={state} value={state}>
-                          {state}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldErrors["address.state"] ? (
-                      <small className="rc-field-error">{fieldErrors["address.state"]}</small>
                     ) : null}
                   </label>
 
@@ -614,25 +646,30 @@ function ReceptionPatients() {
                   </label>
 
                   <label>
-                    <span>Country</span>
-                    <input value={INDIA_COUNTRY} disabled readOnly />
-                    {fieldErrors["address.country"] ? (
-                      <small className="rc-field-error">{fieldErrors["address.country"]}</small>
+                    <span>State</span>
+                    <select
+                      value={form.addressParts?.state || ""}
+                      disabled={modal === "view"}
+                      className={fieldErrors["address.state"] ? "is-invalid" : ""}
+                      onChange={(event) => updateAddressField("state", event.target.value)}
+                    >
+                      <option value="">Select State</option>
+                      {INDIAN_STATES.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                    {fieldErrors["address.state"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.state"]}</small>
                     ) : null}
                   </label>
 
                   <label>
-                    <span>Pincode</span>
-                    <input
-                      value={form.addressParts?.pincode || ""}
-                      disabled={modal === "view"}
-                      className={fieldErrors["address.pincode"] ? "is-invalid" : ""}
-                      inputMode="numeric"
-                      maxLength={6}
-                      onChange={(event) => updateAddressField("pincode", event.target.value)}
-                    />
-                    {fieldErrors["address.pincode"] ? (
-                      <small className="rc-field-error">{fieldErrors["address.pincode"]}</small>
+                    <span>Country</span>
+                    <input value={INDIA_COUNTRY} disabled readOnly />
+                    {fieldErrors["address.country"] ? (
+                      <small className="rc-field-error">{fieldErrors["address.country"]}</small>
                     ) : null}
                   </label>
                 </div>
