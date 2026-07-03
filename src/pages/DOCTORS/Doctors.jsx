@@ -9,6 +9,11 @@ import {
   ToggleRight,
   Calendar,
   X,
+  Camera,
+  Mail,
+  Phone,
+  ArrowUpDown,
+  RotateCw,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AuthImage, {
@@ -92,6 +97,35 @@ const cleanDisplayText = (value) => {
 
 const getImageUrl = (entity = {}) => String(entity.imageUrl || "").trim();
 
+const getDoctorDateAddedValue = (doctor = {}) =>
+  doctor.dateAdded ??
+  doctor.createdAt ??
+  doctor.createdOn ??
+  doctor.createdDate ??
+  doctor.addedOn ??
+  "";
+
+const formatDateAdded = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return cleanDisplayText(value);
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const getDoctorAvailabilityDateValue = (doctor = {}) =>
+  doctor.dateAvailability ??
+  doctor.availableDate ??
+  doctor.availabilityDate ??
+  doctor.dateAvailable ??
+  getDoctorDateAddedValue(doctor);
+
+const getDoctorWorkingHours = (doctor = {}) =>
+  doctor.workingHours ?? doctor.availableTime ?? doctor.available_time ?? "";
+
 const getDoctorFee = (doctor = {}) =>
   doctor.consultationFee ?? doctor.fees ?? doctor.Fees ?? "";
 
@@ -101,6 +135,14 @@ const formatFeeValue = (value) => {
 
   const numberValue = Number(text);
   return Number.isNaN(numberValue) ? text : numberValue.toFixed(2);
+};
+
+const formatPhoneValue = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+  return cleanDisplayText(value);
 };
 
 const getDoctorPhone = (doctor = {}) =>
@@ -176,8 +218,9 @@ const validateEditForm = (form) => {
   errors.areaofExpertise = validateText(form.areaofExpertise, "Area of expertise");
   errors.experience = validateNumeric(form.experience, "Experience", {
     integer: true,
+    max: 99,
   });
-  errors.fees = validateNumeric(form.fees, "Fees");
+  errors.fees = validateNumeric(form.fees, "Consultation fee");
   errors.email = validateGmail(form.email, 'Email', { strict: false });
   errors.phone = validateMobile(form.phone, "Phone");
   errors.isActive = validateSelected(String(form.isActive), "a status");
@@ -187,6 +230,14 @@ const validateEditForm = (form) => {
   });
 
   return errors;
+};
+
+const appendDoctorFormData = (body, values) => {
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      body.append(key, value);
+    }
+  });
 };
 
 const buildDoctorUpdateBody = ({
@@ -234,6 +285,14 @@ function Doctors() {
   const toast = useToast();
   const editImageInputRef = useRef(null);
   const [searchText, setSearchText] = useState("");
+  const [specializationFilter, setSpecializationFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [experienceFilter, setExperienceFilter] = useState("");
+  const [sortConfig, setSortConfig] = useState({
+    key: "dateAdded",
+    direction: "desc",
+  });
+  const [flippedDoctorIds, setFlippedDoctorIds] = useState({});
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -401,19 +460,97 @@ function Doctors() {
 
   const filteredDoctors = useMemo(() => {
     const value = searchText.trim().toLowerCase();
-    if (!value) return doctors;
+    const filtered = doctors.filter((doctor) => {
+      const matchesSearch =
+        !value ||
+        [
+          doctor.name,
+          doctor.specialization,
+          doctor.areaofExpertise ?? doctor.areaOfExpertise,
+          doctor.email,
+        ]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(value));
 
-    return doctors.filter((doctor) =>
-      [
-        doctor.name,
-        doctor.specialization,
-        doctor.areaofExpertise ?? doctor.areaOfExpertise,
-        doctor.email,
-      ]
-        .filter(Boolean)
-        .some((field) => String(field).toLowerCase().includes(value))
-    );
-  }, [doctors, searchText]);
+      const matchesSpecialization =
+        !specializationFilter ||
+        String(doctor.specialization || "") === specializationFilter;
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === "active"
+          ? getDoctorIsActive(doctor)
+          : !getDoctorIsActive(doctor));
+      const experience = Number(doctor.experience ?? 0);
+      const matchesExperience =
+        !experienceFilter ||
+        (experienceFilter === "0-5" && experience <= 5) ||
+        (experienceFilter === "6-10" && experience >= 6 && experience <= 10) ||
+        (experienceFilter === "11+" && experience >= 11);
+
+      return (
+        matchesSearch &&
+        matchesSpecialization &&
+        matchesStatus &&
+        matchesExperience
+      );
+    });
+
+    const directionFactor = sortConfig.direction === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let first = "";
+      let second = "";
+
+      if (sortConfig.key === "dateAdded") {
+        first = new Date(getDoctorDateAddedValue(a)).getTime() || 0;
+        second = new Date(getDoctorDateAddedValue(b)).getTime() || 0;
+      } else if (sortConfig.key === "experience") {
+        first = Number(a.experience ?? 0);
+        second = Number(b.experience ?? 0);
+      } else if (sortConfig.key === "fee") {
+        first = Number(getDoctorFee(a) ?? 0);
+        second = Number(getDoctorFee(b) ?? 0);
+      } else if (sortConfig.key === "status") {
+        first = getDoctorIsActive(a) ? 1 : 0;
+        second = getDoctorIsActive(b) ? 1 : 0;
+      } else {
+        first = String(a[sortConfig.key] ?? "").toLowerCase();
+        second = String(b[sortConfig.key] ?? "").toLowerCase();
+      }
+
+      if (first < second) return -1 * directionFactor;
+      if (first > second) return 1 * directionFactor;
+      return 0;
+    });
+  }, [
+    doctors,
+    searchText,
+    specializationFilter,
+    statusFilter,
+    experienceFilter,
+    sortConfig,
+  ]);
+
+  const specializationOptions = useMemo(
+    () =>
+      [...new Set(doctors.map((doctor) => doctor.specialization).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b))),
+    [doctors]
+  );
+
+  const handleSort = (key) => {
+    setSortConfig((previous) => ({
+      key,
+      direction:
+        previous.key === key && previous.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const toggleDoctorCardFlip = (doctorKey) => {
+    setFlippedDoctorIds((previous) => ({
+      ...previous,
+      [doctorKey]: !previous[doctorKey],
+    }));
+  };
 
   const editInitial = useMemo(() => {
     return (editForm.name.trim()[0] || "D").toUpperCase();
@@ -478,6 +615,9 @@ function Doctors() {
 
     if (["experience", "fees"].includes(name)) {
       nextValue = onlyNumberValue(value);
+      if (name === "experience") {
+        nextValue = nextValue.slice(0, 2);
+      }
     }
 
     setEditForm((previous) => ({
@@ -561,14 +701,38 @@ function Doctors() {
       doctor: editingDoctor,
       form: editForm,
     });
-
-    try {
-      const response = await fetch(`${DOCTORS_API_URL}/${editingDoctor.id}`, {
+    const requestOptions = editImageFile
+      ? (() => {
+        const body = new FormData();
+        appendDoctorFormData(body, {
+          ...requestBody,
+          Name: requestBody.name,
+          Specialization: requestBody.specialization,
+          Experience: requestBody.experience,
+          Qualification: requestBody.qualification,
+          ConsultationFee: requestBody.consultationFee,
+          AreaofExpertise: requestBody.areaofExpertise,
+          Email: requestBody.email,
+          PhoneNumber: requestBody.phoneNumber,
+          IsActive: String(requestBody.isActive),
+        });
+        body.append("Image", editImageFile);
+        return {
+          method: "PUT",
+          body,
+        };
+      })()
+      : {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
+      };
+
+    try {
+      const response = await fetch(`${DOCTORS_API_URL}/${editingDoctor.id}`, {
+        ...requestOptions,
       });
 
       if (!response.ok) {
@@ -648,7 +812,7 @@ function Doctors() {
       return;
     }
 
-    const shouldDelete = window.confirm("Delete this doctor?");
+    const shouldDelete = window.confirm("Are you sure you want to delete this doctor?");
     if (!shouldDelete) return;
 
     setDeleteLoadingId(doctorId);
@@ -691,7 +855,7 @@ function Doctors() {
           <p>
             {loading
               ? "Loading doctors..."
-              : `${filteredDoctors.length} clinicians registered`}
+              : `Total Doctors: ${filteredDoctors.length}`}
           </p>
         </div>
 
@@ -715,44 +879,86 @@ function Doctors() {
         </div>
       </div>
 
-      <div className="doctors-clinic-banner">
-        <span>Clinic Name</span>
-        <strong>{clinicName}</strong>
-      </div>
+      {/* <div className="doctors-clinic-card">
+        <div>
+          <span>Clinic</span>
+          <strong>{clinicName}</strong>
+        </div>
+        <p>{doctors.length} Doctors Registered</p>
+      </div> */}
 
-      <div className="doctors-search-bar">
-        <Search size={16} />
-        <input
-          value={searchText}
-          onChange={(event) => setSearchText(event.target.value)}
-          placeholder="Search by name, specialty, email..."
-        />
+      <div className="doctors-toolbar">
+        <div className="doctors-search-bar">
+          <Search size={16} />
+          <input
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search by name, specialty, email..."
+          />
+        </div>
+        <select
+          value={specializationFilter}
+          onChange={(event) => setSpecializationFilter(event.target.value)}
+          aria-label="Filter by specialization"
+        >
+          <option value="">All Specializations</option>
+          {specializationOptions.map((specialization) => (
+            <option key={specialization} value={specialization}>
+              {specialization}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          aria-label="Filter by status"
+        >
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select
+          value={experienceFilter}
+          onChange={(event) => setExperienceFilter(event.target.value)}
+          aria-label="Filter by experience"
+        >
+          <option value="">All Experience</option>
+          <option value="0-5">0-5 years</option>
+          <option value="6-10">6-10 years</option>
+          <option value="11+">11+ years</option>
+        </select>
       </div>
 
       {error ? <div className="doctors-error">{error}</div> : null}
 
-      <div className="doctors-table">
-        <div className="doctors-thead">
-          <span>S.No.</span>
-          <span>Name</span>
-          <span>Specialization</span>
-          <span>Area of Expertise</span>
-          <span>Experience</span>
-          <span className="doctors-fee-heading">Doctor Fees</span>
-          <span>Contact</span>
-          <span>Status</span>
-          <span>Available Time</span>
-          <span>Actions</span>
+      {/* <div className="doctors-sortbar">
+        <span>Sort by</span>
+        <button type="button" onClick={() => handleSort("name")}>
+          Name <ArrowUpDown size={13} />
+        </button>
+        <button type="button" onClick={() => handleSort("specialization")}>
+          Specialization <ArrowUpDown size={13} />
+        </button>
+        <button type="button" onClick={() => handleSort("experience")}>
+          Experience <ArrowUpDown size={13} />
+        </button>
+        <button type="button" onClick={() => handleSort("fee")}>
+          Consultation Fee <ArrowUpDown size={13} />
+        </button>
+        <button type="button" onClick={() => handleSort("dateAdded")}>
+          Date Added <ArrowUpDown size={13} />
+        </button>
+      </div> */}
+
+      {!loading && filteredDoctors.length === 0 ? (
+        <div className="doctors-empty doctors-empty-card">
+          <strong>No doctor records found</strong>
+          <span>Add a doctor or adjust the search and filters to see results.</span>
         </div>
+      ) : null}
 
-        {!loading && filteredDoctors.length === 0 ? (
-          <div className="doctors-empty">No doctors found.</div>
-        ) : null}
-
-        {filteredDoctors.map((doc, index) => {
-          const doctorImageUrl = getImageUrl(doc);
-
-
+      <div className="doctors-card-grid">
+        {filteredDoctors.map((doc) => {
           const initials =
             (doc.name || "D")
               .split(" ")
@@ -764,90 +970,155 @@ function Doctors() {
           const isActive = getDoctorIsActive(doc);
           const isStatusUpdating = toggleLoadingId === doc.id;
           const isDeleting = deleteLoadingId === doc.id;
+          const doctorKey = doc.id ?? `${doc.name}-${doc.email}`;
+          const isFlipped = Boolean(flippedDoctorIds[doctorKey]);
 
           return (
-            <div className="doctors-row" key={doc.id ?? `${doc.name}-${doc.email}`}>
-              <span>{index + 1}</span>
-              <div className="doctors-cell doctors-name-cell">
-                <b>{doc.name || "-"}</b>
-              </div>
-
-              <div className="doctors-cell">{doc.specialization || "-"}</div>
-
-              <div className="doctors-cell">
-                {cleanDisplayText(doc.areaofExpertise ?? doc.areaOfExpertise)}
-              </div>
-
-              <div className="doctors-cell">
-                {doc.experience !== undefined && doc.experience !== null
-                  ? `${doc.experience} yrs`
-                  : "-"}
-              </div>
-
-              <div className="doctors-cell doctors-fee">
-                {getDoctorFee(doc) !== undefined && getDoctorFee(doc) !== null && getDoctorFee(doc) !== ""
-                  ? formatIndianCurrency(getDoctorFee(doc))
-                  : "-"}
-              </div>
-
-              <div className="doctors-contact-cell">
-                <span>{cleanDisplayText(doc.phone)}</span>
-                <span>{cleanDisplayText(doc.email)}</span>
-              </div>
-
-              <div className="doctors-cell doctors-status-cell">
-                <button
-                  type="button"
-                  className="doctors-status-button"
-                  onClick={() => handleToggleDoctorStatus(doc)}
-                  disabled={!doc.id || !canEditDoctor || isStatusUpdating || isDeleting}
-                  title={canEditDoctor ? "Toggle status" : permissionDisabledTitle}
-                >
-                  <span
-                    className={`doctors-status ${isActive ? "doctors-status-active" : "doctors-status-inactive"
-                      } ${isStatusUpdating ? "doctors-status-updating" : ""}`}
+            <article
+              className={`doctor-profile-card ${!isActive ? "doctor-profile-card-inactive" : ""} ${isFlipped ? "doctor-profile-card-flipped" : ""}`}
+              key={doctorKey}
+            >
+              <div className="doctor-card-inner">
+                <div className="doctor-card-face doctor-card-front">
+                  <div className="doctor-card-corner" />
+                  <button
+                    type="button"
+                    className="doctor-card-flip-btn"
+                    onClick={() => toggleDoctorCardFlip(doctorKey)}
+                    title="View fee and availability"
+                    aria-label="View fee and availability"
                   >
-                    {isStatusUpdating ? (
-                      "Updating..."
-                    ) : isActive ? (
-                      <>
-                        <ToggleRight size={14} /> Active
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft size={14} /> Inactive
-                      </>
-                    )}
-                  </span>
-                </button>
-              </div>
+                    <RotateCw size={15} />
+                  </button>
 
-              <div className="doctors-cell doctors-time-cell">
-                {doc.availableTime || "9:00 AM - 5:00 PM"}
-              </div>
+                  <div className="doctor-card-profile">
+                    <div className="doctor-card-avatar" title="Profile">
+                      <AuthImage
+                        src={getImageUrl(doc)}
+                        alt={doc.name || "Doctor"}
+                        fallback={<span>{initials}</span>}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          display: "flex",
+                        }}
+                      />
+                    </div>
+                  </div>
 
-              <div className="doctors-action-cell">
-                <button
-                  type="button"
-                  className="doctors-action-icon"
-                  onClick={() => openEditDoctor(doc)}
-                  disabled={!doc.id || !canEditDoctor || isDeleting}
-                  title={canEditDoctor ? "Edit doctor" : permissionDisabledTitle}
-                >
-                  <Pencil size={14} />
-                </button>
+                  <div className="doctor-card-identity">
+                    <h3>{doc.name || "-"}</h3>
+                    <p>{doc.specialization || "-"}</p>
+                  </div>
 
-                <button
-                  type="button"
-                  className="doctors-action-icon doctors-action-icon-delete"
-                  onClick={() => handleDeleteDoctor(doc.id)}
-                  disabled={!doc.id || !canDeleteDoctor || isDeleting || isStatusUpdating}
-                  title={canDeleteDoctor ? "Delete doctor" : permissionDisabledTitle}
-                >
-                  <Trash2 size={14} />
-                </button>
+                  <div className="doctor-card-details">
+                    <div>
+                      <span>Name</span>
+                      <b>{doc.name || "-"}</b>
+                    </div>
+                    <div>
+                      <span>Specialization</span>
+                      <b>{doc.specialization || "-"}</b>
+                    </div>
+                    <div>
+                      <span>Exp</span>
+                      <b>
+                        {doc.experience !== undefined && doc.experience !== null
+                          ? `${doc.experience} yrs`
+                          : "-"}
+                      </b>
+                    </div>
+                    <div>
+                      <span>Contact</span>
+                      <b className="doctor-card-contact">
+                        <span><Phone size={13} /> {formatPhoneValue(getDoctorPhone(doc))}</span>
+                        <span><Mail size={10} /> {cleanDisplayText(doc.email)}</span>
+                      </b>
+                    </div>
+                    <div>
+                      <span>Status</span>
+                      <button
+                        type="button"
+                        className="doctors-status-button"
+                        onClick={() => handleToggleDoctorStatus(doc)}
+                        disabled={!doc.id || !canEditDoctor || isStatusUpdating || isDeleting}
+                        title={canEditDoctor ? "Toggle status" : permissionDisabledTitle}
+                      >
+                        <span
+                          className={`doctors-status ${isActive ? "doctors-status-active" : "doctors-status-inactive"
+                            } ${isStatusUpdating ? "doctors-status-updating" : ""}`}
+                        >
+                          {isStatusUpdating
+                            ? "Updating..."
+                            : isActive
+                              ? "Active"
+                              : "Inactive"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="doctor-card-face doctor-card-back">
+                  <button
+                    type="button"
+                    className="doctor-card-flip-btn"
+                    onClick={() => toggleDoctorCardFlip(doctorKey)}
+                    title="Back to profile"
+                    aria-label="Back to profile"
+                  >
+                    <RotateCw size={15} />
+                  </button>
+                  <div className="doctor-card-back-title">
+                    <h3>{doc.name || "-"}</h3>
+                    <p>Availability & Actions</p>
+                  </div>
+
+                  <div className="doctor-card-details doctor-card-back-details">
+                    <div>
+                      <span>Consultation Fee</span>
+                      <b>
+                        {getDoctorFee(doc) !== undefined && getDoctorFee(doc) !== null && getDoctorFee(doc) !== ""
+                          ? formatIndianCurrency(getDoctorFee(doc))
+                          : "-"}
+                      </b>
+                    </div>
+                    <div>
+                      <span>Working Hrs</span>
+                      <b>{getDoctorWorkingHours(doc) || "9:00 AM - 5:00 PM"}</b>
+                    </div>
+                    <div>
+                      <span>Date Availability</span>
+                      <b>{formatDateAdded(getDoctorAvailabilityDateValue(doc))}</b>
+                    </div>
+                  </div>
+
+                  <div className="doctor-card-actions">
+                    <button
+                      type="button"
+                      className="doctors-action-icon"
+                      onClick={() => openEditDoctor(doc)}
+                      disabled={!doc.id || !canEditDoctor || isDeleting}
+                      title={canEditDoctor ? "Edit doctor" : permissionDisabledTitle}
+                    >
+                      <Pencil size={14} />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="doctors-action-icon doctors-action-icon-delete"
+                      onClick={() => handleDeleteDoctor(doc.id)}
+                      disabled={!doc.id || !canDeleteDoctor || isDeleting || isStatusUpdating}
+                      title={canDeleteDoctor ? "Delete doctor" : permissionDisabledTitle}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            </article>
           );
         })}
       </div>
@@ -885,6 +1156,22 @@ function Doctors() {
                       objectFit: "cover",
                       display: "flex",
                     }}
+                  />
+                  <button
+                    type="button"
+                    className="doctor-edit-image-btn"
+                    onClick={() => editImageInputRef.current?.click()}
+                    title="Upload profile image"
+                    aria-label="Upload profile image"
+                  >
+                    <Camera size={17} />
+                  </button>
+                  <input
+                    ref={editImageInputRef}
+                    type="file"
+                    className="doctor-edit-image-input"
+                    accept="image/*"
+                    onChange={handleEditImageChange}
                   />
                 </div>
               </div>
@@ -948,6 +1235,7 @@ function Doctors() {
                     name="experience"
                     type="number"
                     min="0"
+                    max="99"
                     value={editForm.experience}
                     onChange={handleEditFieldChange}
                     className={editFieldErrors.experience ? "is-invalid" : ""}
@@ -961,7 +1249,7 @@ function Doctors() {
                 </div>
 
                 <div className="doctor-edit-field">
-                  <label htmlFor="edit-fees">Doctor Fees</label>
+                  <label htmlFor="edit-fees">Consultation Fee</label>
                   <input
                     id="edit-fees"
                     name="fees"
