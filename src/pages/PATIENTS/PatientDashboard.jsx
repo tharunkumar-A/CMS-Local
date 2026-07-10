@@ -89,7 +89,14 @@ const getAppointmentTime = (appointment = {}) =>
   firstValue((appointment || {}).time, (appointment || {}).slot, (appointment || {}).timeRange, (appointment || {}).scheduleTime, (appointment || {}).startTime, (appointment || {}).endTime);
 
 const getDoctorName = (appointment = {}) =>
-  firstValue((appointment || {}).doctorName, (appointment || {}).doctor?.name, (appointment || {}).doctor?.fullName, (appointment || {}).practitionerName, (appointment || {}).providerName);
+  firstValue(
+    typeof (appointment || {}).doctor === "string" ? (appointment || {}).doctor : undefined,
+    (appointment || {}).doctorName,
+    (appointment || {}).doctor?.name,
+    (appointment || {}).doctor?.fullName,
+    (appointment || {}).practitionerName,
+    (appointment || {}).providerName
+  );
 
 const getSpecialization = (appointment = {}) =>
   firstValue((appointment || {}).specialization, (appointment || {}).department, (appointment || {}).speciality, (appointment || {}).specialty, (appointment || {}).doctor?.specialization);
@@ -98,7 +105,7 @@ const getClinicName = (appointment = {}) =>
   firstValue((appointment || {}).clinic, (appointment || {}).clinicName, (appointment || {}).hospitalName, (appointment || {}).departmentName);
 
 const getLocation = (appointment = {}) =>
-  firstValue((appointment || {}).location, (appointment || {}).room, (appointment || {}).branch, (appointment || {}).site, (appointment || {}).clinicAddress);
+  firstValue((appointment || {}).location, (appointment || {}).room, (appointment || {}).branch, (appointment || {}).site, (appointment || {}).clinicAddress, getClinicName(appointment));
 
 const getAppointmentAvatar = (appointment = {}) => {
   const doctorName = String(getDoctorName(appointment) || "").trim();
@@ -180,12 +187,16 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
     navigate("/patient/appointments/book");
   };
 
-  const handleViewDetails = () => {
-    navigate("/patient/profile");
+  const handleViewRecords = () => {
+    navigate("/patient/medical-history");
+  };
+
+  const handleViewAppointmentDetails = () => {
+    navigate("/patient/appointments");
   };
 
   const handleReschedule = () => {
-    navigate("/patient/appointments");
+    navigate("/patient/appointments/book");
   };
 
   const handleViewAllNotifications = () => {
@@ -199,6 +210,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
       note: appointmentTime || appointmentStatus,
       icon: Clock,
       tone: "teal",
+      route: "/patient/appointments",
     },
     {
       label: "Previous visits",
@@ -206,6 +218,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
       note: "Completed consultations",
       icon: FileText,
       tone: "blue",
+      route: "/patient/medical-history",
     },
     {
       label: "Prescriptions",
@@ -213,6 +226,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
       note: "Available to download",
       icon: Pill,
       tone: "amber",
+      route: "/patient/prescriptions",
     },
     {
       label: "Bills pending",
@@ -220,6 +234,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
       note: pendingBillsAmount ? "Payment due" : "No pending balance",
       icon: DollarSign,
       tone: "green",
+      route: "/patient/bills",
     },
   ];
 
@@ -236,7 +251,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
             <Calendar size={16} />
             Book appointment
           </button>
-          <button type="button" className="pd-header-btn" onClick={handleViewDetails}>
+          <button type="button" className="pd-header-btn" onClick={handleViewRecords}>
             <FileText size={16} />
             View records
           </button>
@@ -247,7 +262,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
-            <button type="button" className={`pd-stat-card pd-stat-card--${card.tone}`} key={card.label}>
+            <button type="button" className={`pd-stat-card pd-stat-card--${card.tone}`} key={card.label} onClick={() => navigate(card.route)}>
               <div className={`pd-stat-icon pd-stat-icon--${card.tone}`}>
                 <Icon size={18} />
               </div>
@@ -295,7 +310,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
                 </div>
 
                 <div className="pd-appointment-actions">
-                  <button type="button" className="pd-action-btn pd-action-btn--primary" onClick={handleViewDetails}>
+                  <button type="button" className="pd-action-btn pd-action-btn--primary" onClick={handleViewAppointmentDetails}>
                     View details
                   </button>
                   <button type="button" className="pd-action-btn" onClick={handleReschedule}>
@@ -460,7 +475,7 @@ function PatientDashboard({ patient, visits = EMPTY_ARRAY, prescriptions = EMPTY
               <Calendar size={22} />
               <span>Book appointment</span>
             </button>
-            <button type="button" className="pd-action-tile" onClick={handleViewDetails}>
+            <button type="button" className="pd-action-tile" onClick={handleViewRecords}>
               <FileText size={22} />
               <span>View records</span>
             </button>

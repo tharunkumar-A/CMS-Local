@@ -2525,7 +2525,7 @@ export const fetchAuditLogs = async () => {
   );
   const logs = remoteLogs.length
     ? remoteLogs
-    : localLogs.map((log) => withAuditRoleFallback(log, roleLookup, currentIpAddress));
+    : localLogs.map((log) => withAuditFallback(log, roleLookup, emailLookup, currentIpAddress));
 
   if (!logs.length && auditResult.status === "rejected" && loginResult.status === "rejected") {
     throw auditResult.reason;

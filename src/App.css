@@ -928,7 +928,8 @@
   font-weight: 700;
 }
 
-.booking-field-group input {
+.booking-field-group input,
+.booking-field-group textarea {
   width: 100%;
   min-height: 44px;
   padding: 0 14px;
@@ -936,6 +937,12 @@
   border-radius: 12px;
   background: #f8fafc;
   color: #0f172a;
+}
+
+.booking-field-group textarea {
+  min-height: 108px;
+  padding: 12px 14px;
+  resize: vertical;
 }
 
 .booking-slot-list {

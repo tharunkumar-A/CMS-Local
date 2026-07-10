@@ -138,6 +138,159 @@ export default App;
 /* ----------------- Patient module (inlined) ----------------- */
 // patient styles should be moved to App.css; removed individual import
 
+const getNestedValue = (record, path) => {
+  if (record == null) return undefined;
+  const keys = typeof path === "string" ? path.replace(/\?\./g, ".").split(".") : path;
+  return keys.reduce((value, key) => (value && typeof value === "object" ? value[key] : undefined), record);
+};
+
+const readFirst = (record, keys) =>
+  keys.reduce((value, key) => value || getNestedValue(record, key), "") || "";
+
+const readId = (record, keys) => {
+  const value = keys.reduce((currentValue, key) => currentValue || getNestedValue(record, key), undefined);
+  return value === undefined || value === null ? undefined : String(value);
+};
+
+const normalizeName = (value) => {
+  if (!value && value !== 0) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object") {
+    const result = readFirst(value, [
+      "name",
+      "doctorName",
+      "fullName",
+      "departmentName",
+      "specialty",
+      "speciality",
+      "department",
+      "specialization",
+      "clinicName",
+      "hospitalName",
+      "title",
+      "label",
+    ]);
+    if (result === undefined || result === null) return "";
+    return typeof result === "string" ? result.trim() : String(result).trim();
+  }
+  return String(value).trim();
+};
+
+const normalizeComparable = (value) => String(value || "").trim().toLowerCase();
+
+const formatSlotTime = (value) => {
+  const time = String(value || "").trim();
+  if (!time) return "";
+  if (/^\d{1,2}:\d{2}$/.test(time)) return `${time}:00`;
+  return time;
+};
+
+const formatAppointmentDateTime = (value) => {
+  const date = String(value || "").trim();
+  if (!date) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return `${date}T00:00:00.000Z`;
+  return date;
+};
+
+const readNumericId = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : value;
+};
+
+const formatPatientDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  }
+  return String(value);
+};
+
+const getAppointmentNumber = (appointment) =>
+  readFirst(appointment, ["appointmentNumber", "number", "referenceNumber", "id", "appointmentId"]);
+
+const getAppointmentDoctor = (appointment) =>
+  readFirst(appointment, ["doctor", "doctorName", "doctor.name", "providerName", "practitionerName"]) || "Doctor assigned";
+
+const getAppointmentClinic = (appointment) =>
+  readFirst(appointment, ["clinic", "clinicName", "hospitalName", "hospital", "branch"]) || "Clinic details unavailable";
+
+const getAppointmentDate = (appointment) =>
+  readFirst(appointment, ["date", "appointmentDate", "scheduledDate", "visitDate", "createdAt"]);
+
+const getAppointmentTime = (appointment) =>
+  formatSlotTime(readFirst(appointment, ["time", "startTime", "slot", "appointmentTime", "scheduleTime"]));
+
+const getAppointmentReason = (appointment) =>
+  readFirst(appointment, ["reasonForVisit", "reason", "summary", "notes", "complaint"]) || "Reason not provided";
+
+const getAppointmentStatus = (appointment) =>
+  readFirst(appointment, ["status", "appointmentStatus", "state"]) || "Scheduled";
+
+const normalizeClinicOption = (clinic) => {
+  const source = clinic && typeof clinic === "object" ? clinic : {};
+  const name = normalizeName(clinic);
+  return {
+    ...source,
+    id: readId(source, ["id", "clinicId", "hospitalId"]) || name,
+    name,
+    address: readFirst(source, ["address", "location", "clinicAddress", "hospitalAddress"]),
+  };
+};
+
+const normalizeDepartmentOption = (department, clinicId = "") => {
+  const source = department && typeof department === "object" ? department : {};
+  const name =
+    normalizeName(department) ||
+    normalizeName(readFirst(source, ["name", "departmentName", "specialization", "specialty", "title"]));
+  const normalizedClinicId = String(clinicId || readId(source, ["clinicId", "hospitalId", "clinic.id"]) || "");
+
+  return {
+    ...source,
+    id: readId(source, ["id", "departmentId", "specialtyId"]) || name,
+    name,
+    clinicId: normalizedClinicId,
+  };
+};
+
+const normalizeDoctorOption = (doctor, clinicId = "", departmentName = "") => {
+  const source = doctor && typeof doctor === "object" ? doctor : {};
+  const departmentLabel =
+    normalizeName(readFirst(source, ["department", "departmentName", "specialty", "speciality", "specialization", "department.name"])) ||
+    normalizeName(departmentName);
+
+  return {
+    ...source,
+    id: readId(source, ["id", "doctorId", "userId"]),
+    name: normalizeName(doctor),
+    specialty: departmentLabel,
+    departmentName: departmentLabel,
+    departmentId: readId(source, ["departmentId", "specialtyId", "department.id"]),
+    clinicId: String(clinicId || readId(source, ["clinicId", "hospitalId", "clinic.id"]) || ""),
+  };
+};
+
+const normalizeSlotOption = (slot, doctorId = "", selectedDate = "") => {
+  const source = slot && typeof slot === "object" ? slot : {};
+  const normalizedDoctorId = String(doctorId || readId(source, ["doctorId", "doctor.id", "doctor.doctorId"]) || "");
+  const date = readFirst(source, ["date", "appointmentDate", "visitDate"]) || selectedDate;
+  const time = formatSlotTime(readFirst(source, ["time", "slot", "appointmentTime"]) || (typeof slot === "string" ? slot : ""));
+
+  return {
+    ...source,
+    id: readId(source, ["id"]) || `${normalizedDoctorId}-${date}-${time}`,
+    doctorId: normalizedDoctorId,
+    date,
+    time,
+    clinicId: readId(source, ["clinicId", "hospitalId", "clinic.id"]),
+    departmentId: readId(source, ["departmentId", "specialtyId", "department.id"]),
+  };
+};
+
 function PatientShell({ notifications, children, patient }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -220,7 +373,7 @@ function PatientShell({ notifications, children, patient }) {
             <ClipboardList size={16} />
             <span>Dashboard</span>
           </NavLink>
-          <NavLink to="/patient/appointments/book" className={({ isActive }) => `pp-nav-item ${isActive ? "active" : ""}`}>
+          <NavLink to="/patient/appointments" className={({ isActive }) => `pp-nav-item ${isActive ? "active" : ""}`}>
             <Calendar size={16} />
             <span>Appointments</span>
           </NavLink>
@@ -414,7 +567,7 @@ function PatientRoutes() {
             />
           }
         />
-        <Route path="appointments" element={<Navigate to="appointments/book" replace />} />
+        <Route path="appointments" element={<PatientAppointmentsPage visits={visits} />} />
         <Route path="appointments/book" element={<PatientBookingWizardPage visits={visits} />} />
         <Route path="book" element={<Navigate to="appointments/book" replace />} />
         <Route path="medical-history" element={<PatientMedicalHistoryPage patient={patient} visits={visits} />} />
@@ -450,6 +603,11 @@ function PatientPageShell({ title, subtitle, action, children }) {
 function PatientAppointmentsPage({ visits = [] }) {
   const navigate = useNavigate();
   const rows = visits || [];
+  const [selectedAppointment, setSelectedAppointment] = useState(rows[0] || null);
+
+  useEffect(() => {
+    setSelectedAppointment(rows[0] || null);
+  }, [rows]);
 
   return (
     <PatientPageShell
@@ -475,23 +633,71 @@ function PatientAppointmentsPage({ visits = [] }) {
 
         {rows.length ? (
           <div className="pd-notification-list">
-            {rows.map((visit, index) => (
-              <div className="pd-notification-item" key={visit.id || visit.appointmentId || index}>
-                <span className="pd-notification-dot" />
-                <div className="pd-notification-body">
-                  <strong>{visit.date || visit.appointmentDate || visit.createdAt || "Appointment"}</strong>
-                  <span>{visit.doctor?.name || visit.doctorName || visit.specialist || "Doctor assigned"}</span>
-                  <em>{visit.time || visit.slot || visit.status || "Scheduled"}</em>
-                </div>
-                <ChevronRight size={16} className="pd-notification-chevron" />
-              </div>
-            ))}
+            {rows.map((visit, index) => {
+              const appointmentKey = visit.appointmentId || visit.id || index;
+              const isSelected =
+                selectedAppointment &&
+                String(selectedAppointment.appointmentId || selectedAppointment.id || "") === String(visit.appointmentId || visit.id || "");
+
+              return (
+                <button
+                  type="button"
+                  className={`pd-notification-item ${isSelected ? "is-active" : ""}`}
+                  key={appointmentKey}
+                  onClick={() => setSelectedAppointment(visit)}
+                >
+                  <span className="pd-notification-dot" />
+                  <span className="pd-notification-body">
+                    <strong>{getAppointmentNumber(visit) || "Appointment"}</strong>
+                    <span>
+                      {getAppointmentDoctor(visit)} at {getAppointmentClinic(visit)}
+                    </span>
+                    <em>
+                      {formatPatientDate(getAppointmentDate(visit)) || "Date not available"}
+                      {getAppointmentTime(visit) ? `, ${getAppointmentTime(visit)}` : ""} - {getAppointmentStatus(visit)}
+                    </em>
+                  </span>
+                  <ChevronRight size={16} className="pd-notification-chevron" />
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="pd-selected-notification">
             <p>No appointments found yet.</p>
           </div>
         )}
+
+        {selectedAppointment ? (
+          <div className="pd-selected-notification">
+            <div className="pd-selected-notification-head">
+              <strong>{getAppointmentNumber(selectedAppointment) || "Appointment details"}</strong>
+              <span>{getAppointmentStatus(selectedAppointment)}</span>
+            </div>
+            <div className="pd-appointment-detail-grid">
+              <div>
+                <span>Doctor</span>
+                <strong>{getAppointmentDoctor(selectedAppointment)}</strong>
+              </div>
+              <div>
+                <span>Clinic</span>
+                <strong>{getAppointmentClinic(selectedAppointment)}</strong>
+              </div>
+              <div>
+                <span>Date</span>
+                <strong>{formatPatientDate(getAppointmentDate(selectedAppointment)) || "Not available"}</strong>
+              </div>
+              <div>
+                <span>Time</span>
+                <strong>{getAppointmentTime(selectedAppointment) || "Not available"}</strong>
+              </div>
+              <div className="pd-appointment-detail-wide">
+                <span>Reason for visit</span>
+                <strong>{getAppointmentReason(selectedAppointment)}</strong>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </PatientPageShell>
   );
@@ -509,45 +715,10 @@ function PatientBookingWizardPage({ visits = [] }) {
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
+  const [reasonForVisit, setReasonForVisit] = useState("");
   const [bookingState, setBookingState] = useState("idle");
   const [bookingError, setBookingError] = useState("");
   const [loading, setLoading] = useState(true);
-
-  const getValue = (record, path) => {
-    if (record == null) return undefined;
-    if (typeof path === 'string') path = path.replace(/\?\./g, '.').split('.');
-    return path.reduce((value, key) => (value && typeof value === 'object' ? value[key] : undefined), record);
-  };
-
-  const readFirst = (record, keys) =>
-    keys.reduce((value, key) => value || getValue(record, key), "") || "";
-
-  const readId = (record, keys) => {
-    const value = keys.reduce((value, key) => value || getValue(record, key), undefined);
-    return value === undefined || value === null ? undefined : String(value);
-  };
-
-  const normalizeName = (value) => {
-    if (!value && value !== 0) return "";
-    if (typeof value === 'string') return value.trim();
-    if (typeof value === 'object') {
-      const result = readFirst(value, [
-        'name',
-        'departmentName',
-        'specialty',
-        'speciality',
-        'department',
-        'specialization',
-        'clinicName',
-        'hospitalName',
-        'title',
-        'label',
-      ]);
-      if (result === undefined || result === null) return "";
-      return typeof result === 'string' ? result.trim() : String(result).trim();
-    }
-    return String(value).trim();
-  };
 
   const parseApiList = (data) => {
     if (Array.isArray(data)) return data;
@@ -588,9 +759,9 @@ function PatientBookingWizardPage({ visits = [] }) {
         const doctorsUrl = patientApiUrl(PATIENT_API.doctors);
         const doctorsRes = await fetch(doctorsUrl, { headers }).catch(() => null);
         const doctorsData = doctorsRes?.ok ? await doctorsRes.json().catch(() => null) : null;
-        const doctorList = parseApiList(doctorsData);
+        const doctorList = parseApiList(doctorsData).map((doctor) => normalizeDoctorOption(doctor));
 
-        setClinics(clinicList);
+        setClinics(clinicList.map(normalizeClinicOption));
         setDoctors(doctorList);
 
         const deptMap = new Map();
@@ -615,36 +786,65 @@ function PatientBookingWizardPage({ visits = [] }) {
   useEffect(() => {
     const fetchDepartments = async () => {
       if (!selectedClinic) {
+        setDepartments([]);
         return;
       }
 
       const headers = getApiHeaders();
       const clinicId = selectedClinic.id || selectedClinic.clinicId || selectedClinic.hospitalId;
       if (!clinicId) {
+        setDepartments([]);
         return;
       }
 
       try {
+        setDepartments([]);
         const departmentsUrl = patientApiUrl(PATIENT_API.clinicDepartments, { clinicId });
         const response = await fetch(departmentsUrl, { headers }).catch(() => null);
         const data = response?.ok ? await response.json().catch(() => null) : null;
         const departmentsList = parseApiList(data);
-        if (departmentsList.length) {
-          setDepartments(departmentsList.map((department) => ({
-            ...department,
-            id: readId(department, ['id', 'departmentId', 'specialtyId']),
-            name: normalizeName(readFirst(department, ['name', 'departmentName', 'specialization', 'specialty', 'title'])),
-            clinicId,
-          })));
-          return;
-        }
+        setDepartments(departmentsList.map((department) => normalizeDepartmentOption(department, clinicId)));
       } catch (err) {
-        // ignore clinic departments fetch failure
+        setDepartments([]);
       }
     };
 
     fetchDepartments();
   }, [selectedClinic]);
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      if (!selectedClinic || !selectedDepartment) {
+        setDoctors([]);
+        return;
+      }
+
+      const clinicId = selectedClinic.id || selectedClinic.clinicId || selectedClinic.hospitalId;
+      const departmentName = selectedDepartment.name || selectedDepartment.departmentName || selectedDepartment.id;
+      if (!clinicId || !departmentName) {
+        setDoctors([]);
+        return;
+      }
+
+      try {
+        setDoctors([]);
+        const headers = getApiHeaders();
+        const params = new URLSearchParams({
+          clinicId: String(clinicId),
+          department: String(departmentName),
+        });
+        const doctorsUrl = `${patientApiUrl(PATIENT_API.doctors)}?${params.toString()}`;
+        const response = await fetch(doctorsUrl, { headers }).catch(() => null);
+        const data = response?.ok ? await response.json().catch(() => null) : null;
+        const doctorList = parseApiList(data);
+        setDoctors(doctorList.map((doctor) => normalizeDoctorOption(doctor, clinicId, departmentName)));
+      } catch (err) {
+        setDoctors([]);
+      }
+    };
+
+    fetchDoctors();
+  }, [selectedClinic, selectedDepartment]);
 
   useEffect(() => {
     const fetchSlots = async () => {
@@ -665,7 +865,7 @@ function PatientBookingWizardPage({ visits = [] }) {
         const response = await fetch(`${slotsUrl}?date=${encodeURIComponent(selectedDate)}`, { headers }).catch(() => null);
         const data = response?.ok ? await response.json().catch(() => null) : null;
         const slotList = parseApiList(data);
-        setSlots(slotList);
+        setSlots(slotList.map((slot) => normalizeSlotOption(slot, doctorId, selectedDate)));
       } catch (err) {
         setSlots([]);
       }
@@ -675,12 +875,7 @@ function PatientBookingWizardPage({ visits = [] }) {
   }, [selectedDoctor, selectedDate]);
 
   const clinicOptions = useMemo(() => {
-    if (clinics.length) return clinics.map((clinic) => ({
-      ...clinic,
-      id: readId(clinic, ['id', 'clinicId', 'hospitalId']),
-      name: normalizeName(clinic),
-      address: readFirst(clinic, ['address', 'location', 'clinicAddress', 'hospitalAddress']),
-    }));
+    if (clinics.length) return clinics.map(normalizeClinicOption);
 
     const ids = new Map();
     visits.forEach((visit) => {
@@ -693,12 +888,9 @@ function PatientBookingWizardPage({ visits = [] }) {
   }, [clinics, visits]);
 
   const departmentOptions = useMemo(() => {
-    if (departments.length) return departments.map((department) => ({
-      ...department,
-      id: readId(department, ['id', 'departmentId', 'specialtyId']),
-      name: normalizeName(department),
-      clinicId: readId(department, ['clinicId', 'hospitalId', 'clinic?.id']),
-    }));
+    if (departments.length) {
+      return departments.map((department) => normalizeDepartmentOption(department, selectedClinic?.id));
+    }
 
     const ids = new Map();
     visits.forEach((visit) => {
@@ -708,17 +900,12 @@ function PatientBookingWizardPage({ visits = [] }) {
       if (id && name && !ids.has(id)) ids.set(id, { id, name, clinicId });
     });
     return Array.from(ids.values());
-  }, [departments, visits]);
+  }, [departments, selectedClinic, visits]);
 
   const doctorOptions = useMemo(() => {
-    if (doctors.length) return doctors.map((doctor) => ({
-      ...doctor,
-      id: readId(doctor, ['id', 'doctorId', 'userId']),
-      name: normalizeName(doctor),
-      specialty: readFirst(doctor, ['specialty', 'speciality', 'departmentName']),
-      departmentId: readId(doctor, ['departmentId', 'specialtyId', 'department?.id']),
-      clinicId: readId(doctor, ['clinicId', 'hospitalId', 'clinic?.id']),
-    }));
+    if (doctors.length) {
+      return doctors.map((doctor) => normalizeDoctorOption(doctor, selectedClinic?.id, selectedDepartment?.name));
+    }
 
     const ids = new Map();
     visits.forEach((visit) => {
@@ -731,18 +918,12 @@ function PatientBookingWizardPage({ visits = [] }) {
       if (id && name && !ids.has(id)) ids.set(id, { id, name, specialty, departmentId, clinicId });
     });
     return Array.from(ids.values());
-  }, [doctors, visits]);
+  }, [doctors, selectedClinic, selectedDepartment, visits]);
 
   const slotOptions = useMemo(() => {
-    if (slots.length) return slots.map((slot) => ({
-      ...slot,
-      id: readId(slot, ['id']) || `${readId(slot, ['doctorId', 'doctor.id', 'doctor.doctorId'])}-${readFirst(slot, ['date', 'appointmentDate', 'visitDate'])}-${readFirst(slot, ['time', 'slot', 'appointmentTime'])}`,
-      doctorId: readId(slot, ['doctorId', 'doctor.id', 'doctor.doctorId']),
-      date: readFirst(slot, ['date', 'appointmentDate', 'visitDate']),
-      time: readFirst(slot, ['time', 'slot', 'appointmentTime']),
-      clinicId: readId(slot, ['clinicId', 'hospitalId', 'clinic?.id']),
-      departmentId: readId(slot, ['departmentId', 'specialtyId', 'department?.id']),
-    }));
+    if (slots.length) {
+      return slots.map((slot) => normalizeSlotOption(slot, selectedDoctor?.id, selectedDate));
+    }
 
     return visits
       .map((visit) => {
@@ -754,63 +935,93 @@ function PatientBookingWizardPage({ visits = [] }) {
         return doctorId && date && time ? { id: `${doctorId}-${date}-${time}`, doctorId, date, time, clinicId, departmentId } : null;
       })
       .filter(Boolean);
-  }, [slots, visits]);
+  }, [slots, selectedDoctor, selectedDate, visits]);
 
   const filteredDepartments = useMemo(
-    () =>
-      selectedClinic
-        ? departmentOptions.filter((department) => {
-            if (department.clinicId && department.clinicId === selectedClinic.id) return true;
-            if (Array.isArray(department.clinicIds) && department.clinicIds.includes(selectedClinic.id)) return true;
-            if (selectedClinic.departmentIds?.includes(department.id)) return true;
-            return !department.clinicId && !department.clinicIds && !selectedClinic.departmentIds;
-          })
-        : departmentOptions,
+    () => {
+      if (!selectedClinic) return departmentOptions;
+      const selectedClinicId = String(selectedClinic.id || selectedClinic.clinicId || selectedClinic.hospitalId || "");
+
+      return departmentOptions.filter((department) => {
+        if (department.clinicId && String(department.clinicId) === selectedClinicId) return true;
+        if (
+          Array.isArray(department.clinicIds) &&
+          department.clinicIds.some((clinicId) => String(clinicId) === selectedClinicId)
+        )
+          return true;
+        if (
+          Array.isArray(selectedClinic.departmentIds) &&
+          selectedClinic.departmentIds.some((departmentId) => String(departmentId) === String(department.id))
+        )
+          return true;
+        return !department.clinicId && !department.clinicIds && !selectedClinic.departmentIds;
+      });
+    },
     [departmentOptions, selectedClinic]
   );
 
   const filteredDoctors = useMemo(
-    () =>
-      selectedDepartment
-        ? doctorOptions.filter((doctor) => {
-            if (doctor.departmentId && doctor.departmentId !== selectedDepartment.id) return false;
-            if (doctor.departmentName && doctor.departmentName !== selectedDepartment.name) return false;
-            if (doctor.specialty && doctor.specialty !== selectedDepartment.name) return false;
-            if (selectedClinic && doctor.clinicId && doctor.clinicId !== selectedClinic.id) return false;
-            if (
-              selectedClinic &&
-              Array.isArray(doctor.clinicIds) &&
-              doctor.clinicIds.length > 0 &&
-              !doctor.clinicIds.includes(selectedClinic.id)
-            )
-              return false;
-            return true;
-          })
-        : doctorOptions,
+    () => {
+      if (!selectedDepartment) return doctorOptions;
+      const selectedDepartmentId = String(selectedDepartment.id || "");
+      const selectedDepartmentName = normalizeComparable(selectedDepartment.name || selectedDepartment.departmentName || selectedDepartment.id);
+      const selectedClinicId = String(selectedClinic?.id || selectedClinic?.clinicId || selectedClinic?.hospitalId || "");
+
+      return doctorOptions.filter((doctor) => {
+        const doctorDepartmentName = normalizeComparable(doctor.departmentName || doctor.department || doctor.specialty);
+        const doctorDepartmentId = String(doctor.departmentId || "");
+
+        if (
+          doctorDepartmentId &&
+          selectedDepartmentId &&
+          doctorDepartmentId !== selectedDepartmentId &&
+          normalizeComparable(doctorDepartmentId) !== selectedDepartmentName
+        )
+          return false;
+        if (doctorDepartmentName && selectedDepartmentName && doctorDepartmentName !== selectedDepartmentName) return false;
+        if (selectedClinicId && doctor.clinicId && String(doctor.clinicId) !== selectedClinicId) return false;
+        if (
+          selectedClinicId &&
+          Array.isArray(doctor.clinicIds) &&
+          doctor.clinicIds.length > 0 &&
+          !doctor.clinicIds.some((clinicId) => String(clinicId) === selectedClinicId)
+        )
+          return false;
+        return true;
+      });
+    },
     [doctorOptions, selectedDepartment, selectedClinic]
   );
 
   const filteredSlots = useMemo(
-    () =>
-      selectedDoctor
-        ? slotOptions.filter((slot) => {
-            if (slot.doctorId !== selectedDoctor.id) return false;
-            if (selectedDate && slot.date !== selectedDate) return false;
-            return true;
-          })
-        : [],
+    () => {
+      if (!selectedDoctor) return [];
+      const selectedDoctorId = String(selectedDoctor.id || selectedDoctor.doctorId || selectedDoctor.userId || "");
+
+      return slotOptions.filter((slot) => {
+        if (slot.doctorId && String(slot.doctorId) !== selectedDoctorId) return false;
+        if (selectedDate && slot.date && slot.date !== selectedDate) return false;
+        return true;
+      });
+    },
     [slotOptions, selectedDoctor, selectedDate]
   );
 
   const availableTimes = useMemo(
     () =>
       selectedDate
-        ? Array.from(new Set(filteredSlots.map((slot) => slot.time || slot.slot).filter(Boolean)))
+        ? Array.from(new Set(filteredSlots.map((slot) => formatSlotTime(slot.time || slot.slot)).filter(Boolean)))
         : [],
     [filteredSlots, selectedDate]
   );
 
   const stepItems = ['Clinic', 'Department', 'Doctor', 'Date & time', 'Confirm'];
+  const canConfirm =
+    selectedClinic &&
+    selectedDoctor &&
+    selectedDate &&
+    selectedTime &&
+    reasonForVisit.trim();
   const canContinue =
     (step === 1 && selectedClinic) ||
     (step === 2 && selectedDepartment) ||
@@ -828,15 +1039,14 @@ function PatientBookingWizardPage({ visits = [] }) {
     setBookingState('saving');
     setBookingError('');
     try {
+      const hospitalId = selectedClinic?.hospitalId || selectedClinic?.clinicId || selectedClinic?.id;
+      const doctorId = selectedDoctor?.doctorId || selectedDoctor?.id || selectedDoctor?.userId;
       const payload = {
-        clinicId: selectedClinic?.id,
-        clinicName: selectedClinic?.name,
-        departmentId: selectedDepartment?.id,
-        departmentName: selectedDepartment?.name,
-        doctorId: selectedDoctor?.id,
-        doctorName: selectedDoctor?.name,
-        appointmentDate: selectedDate,
-        appointmentTime: selectedTime,
+        hospitalId: readNumericId(hospitalId),
+        doctorId: readNumericId(doctorId),
+        date: formatAppointmentDateTime(selectedDate),
+        startTime: formatSlotTime(selectedTime),
+        reasonForVisit: reasonForVisit.trim(),
       };
       const headers = getApiHeaders();
       const appointmentUrl = patientApiUrl(PATIENT_API.appointments);
@@ -1044,6 +1254,16 @@ function PatientBookingWizardPage({ visits = [] }) {
                   <strong>{selectedTime || 'Not selected'}</strong>
                 </div>
               </div>
+              <div className="booking-field-group">
+                <label htmlFor="reason-for-visit">Reason for visit</label>
+                <textarea
+                  id="reason-for-visit"
+                  rows={4}
+                  value={reasonForVisit}
+                  onChange={(event) => setReasonForVisit(event.target.value)}
+                  placeholder="Fever, follow-up consultation, knee pain..."
+                />
+              </div>
               {bookingError ? <p className="booking-error">{bookingError}</p> : null}
               {bookingState === 'success' && <p className="booking-success">Your appointment request has been sent successfully.</p>}
             </section>
@@ -1068,7 +1288,7 @@ function PatientBookingWizardPage({ visits = [] }) {
               type="button"
               className="booking-button booking-button--primary"
               onClick={handleConfirmBooking}
-              disabled={bookingState === 'saving' || !canContinue}
+              disabled={bookingState === 'saving' || !canConfirm}
             >
               {bookingState === 'saving' ? 'Booking...' : 'Confirm appointment'}
             </button>
@@ -1243,9 +1463,14 @@ function PatientMedicalHistoryPage({ patient, visits = [] }) {
 
 function PatientPrescriptionsPage({ prescriptions = [] }) {
   const prescriptionRecords = Array.isArray(prescriptions) ? prescriptions : [];
+  const [selectedPrescription, setSelectedPrescription] = useState(prescriptionRecords[0] || null);
+
+  useEffect(() => {
+    setSelectedPrescription(prescriptionRecords[0] || null);
+  }, [prescriptionRecords]);
 
   const formatDate = (record) =>
-    readFirst(record, ['visitDate', 'date', 'prescribedOn', 'createdAt', 'appointmentDate']) || 'Unknown date';
+    formatPatientDate(readFirst(record, ['visitDate', 'date', 'prescribedOn', 'createdAt', 'appointmentDate', 'followUpDate'])) || 'Unknown date';
 
   const getTitle = (record) =>
     readFirst(record, ['title', 'summary', 'diagnosis', 'condition', 'description']) || 'Prescription';
@@ -1268,9 +1493,72 @@ function PatientPrescriptionsPage({ prescriptions = [] }) {
   const getDownloadUrl = (record) =>
     readFirst(record, ['documentUrl', 'downloadUrl', 'prescriptionUrl', 'url']) || '';
 
-  const viewPrescription = (url) => {
-    if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const getStatus = (record) =>
+    readFirst(record, ['status', 'prescriptionStatus', 'state']) || 'Available';
+
+  const getInstructions = (record) =>
+    readFirst(record, ['instructions', 'notes', 'advice']) || 'No instructions provided.';
+
+  const getFollowUpDate = (record) =>
+    formatPatientDate(readFirst(record, ['followUpDate', 'followupDate', 'reviewDate'])) || 'Not scheduled';
+
+  const getMedicines = (record) =>
+    Array.isArray(record?.medicines)
+      ? record.medicines
+      : Array.isArray(record?.medicineNames)
+      ? record.medicineNames.map((medicineName) => ({ medicineName }))
+      : [];
+
+  const buildPrescriptionText = (record) => {
+    const medicines = getMedicines(record);
+    const medicineLines = medicines.length
+      ? medicines
+          .map((medicine, index) => {
+            const name = readFirst(medicine, ['medicineName', 'name', 'medicine']) || `Medicine ${index + 1}`;
+            const dosage = readFirst(medicine, ['dosage', 'dose']) || '-';
+            const frequency = readFirst(medicine, ['frequency', 'timing']) || '-';
+            const duration = readFirst(medicine, ['duration', 'days']) || '-';
+            const instructions = readFirst(medicine, ['instructions', 'notes']) || '-';
+            return `${index + 1}. ${name} | Dosage: ${dosage} | Frequency: ${frequency} | Duration: ${duration} | Instructions: ${instructions}`;
+          })
+          .join("\n")
+      : "No medicines listed.";
+
+    return [
+      `Prescription: ${getTitle(record)}`,
+      getDoctor(record),
+      `Status: ${getStatus(record)}`,
+      `Follow-up date: ${getFollowUpDate(record)}`,
+      "",
+      "Instructions:",
+      getInstructions(record),
+      "",
+      "Medicines:",
+      medicineLines,
+    ].join("\n");
+  };
+
+  const viewPrescription = (record) => {
+    setSelectedPrescription(record);
+  };
+
+  const downloadPrescription = (record) => {
+    const url = getDownloadUrl(record);
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const blob = new Blob([buildPrescriptionText(record)], { type: 'text/plain;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const id = record.prescriptionId || record.id || record.appointmentId || 'record';
+    link.href = objectUrl;
+    link.download = `prescription-${id}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
 
   return (
@@ -1293,10 +1581,10 @@ function PatientPrescriptionsPage({ prescriptions = [] }) {
               const title = getTitle(prescription);
               const doctor = getDoctor(prescription);
               const count = getMedicationCount(prescription);
-              const downloadUrl = getDownloadUrl(prescription);
+              const status = getStatus(prescription);
 
               return (
-                <div className="pd-prescription-card" key={prescription.id || prescription.appointmentId || index}>
+                <div className="pd-prescription-card" key={prescription.prescriptionId || prescription.id || prescription.appointmentId || index}>
                   <div className="pd-prescription-copy">
                     <span className="pd-prescription-date">{date}</span>
                     <h3>{title}</h3>
@@ -1309,16 +1597,14 @@ function PatientPrescriptionsPage({ prescriptions = [] }) {
                     <button
                       type="button"
                       className="pd-prescription-btn pd-prescription-btn--ghost"
-                      onClick={() => viewPrescription(downloadUrl)}
-                      disabled={!downloadUrl}
+                      onClick={() => viewPrescription(prescription)}
                     >
                       View
                     </button>
                     <button
                       type="button"
                       className="pd-prescription-btn pd-prescription-btn--primary"
-                      onClick={() => viewPrescription(downloadUrl)}
-                      disabled={!downloadUrl}
+                      onClick={() => downloadPrescription(prescription)}
                     >
                       Download
                     </button>
