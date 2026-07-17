@@ -22,6 +22,7 @@ import {
   canUsePermission,
   fetchAndStoreRolePermissions,
 } from "../../utils/authorization";
+import { formatTitleCase } from "../../utils/format";
 import {
   onlyAlpha,
   onlyIndianMobileValue,
@@ -327,7 +328,7 @@ function Receptionists() {
     let nextValue = value;
 
     if (name === "name") {
-      nextValue = onlyAlpha(value);
+      nextValue = formatTitleCase(onlyAlpha(value));
     }
 
     if (name === "phone") {
@@ -652,7 +653,7 @@ function Receptionists() {
                 </div>
               </div>
 
-              <span className="receptionists-cell">{receptionist.email || "-"}</span>
+              <span className="receptionists-cell receptionists-email">{receptionist.email || "-"}</span>
               <span className="receptionists-cell">{receptionist.phone || "-"}</span>
 
               <span className="receptionists-cell">

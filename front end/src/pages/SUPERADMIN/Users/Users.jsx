@@ -137,7 +137,7 @@ function Users() {
     let nextValue = value;
 
     if (name === "name") {
-      nextValue = onlyAlpha(value);
+      nextValue = formatTitleCase(onlyAlpha(value));
     }
 
     if (["phone", "mobileNumber"].includes(name)) {
@@ -294,7 +294,9 @@ function Users() {
       width: "minmax(170px, 1.2fr)",
       cellClassName: "sa-table-cell--nowrap",
       render: (user) => (
-        <span title={user.email || ""}>{user.email || "-"}</span>
+        <span title={user.email || ""} className="sa-table-text-overflow">
+          {user.email || "-"}
+        </span>
       ),
     },
     { key: "clinic", label: "Clinic" },
@@ -315,8 +317,12 @@ function Users() {
       width: "minmax(168px, 1fr)",
       cellClassName: "sa-table-cell--nowrap sa-table-cell--last-active",
       render: (user) => {
-        const lastActive = user.lastActive || "Never Logged In";
-        return <span title={lastActive}>{lastActive}</span>;
+        const lastActive = user.lastActive || user.lastSeen || user.lastActiveAt || user.updatedAt || user.createdAt || "Never Logged In";
+        return (
+          <span title={lastActive} className="sa-table-text-overflow">
+            {lastActive}
+          </span>
+        );
       },
     },
     {
