@@ -320,6 +320,32 @@
   margin-bottom: 20px;
 }
 
+.mh-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #effcf9, #f0fdfa);
+  border: 1px solid #bce9df;
+}
+
+.mh-summary-header span { color: #0f766e; font-size: 11px; font-weight: 800; letter-spacing: .09em; }
+.mh-summary-header h2 { margin: 6px 0 0; color: #0f172a; font-size: 23px; }
+.mh-summary-header p { margin: 6px 0 0; color: #475569; font-size: 13px; }
+.mh-download-button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 14px; border: 1px solid #0f766e; border-radius: 10px; background: #0f766e; color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.mh-download-button:disabled { opacity: .55; cursor: not-allowed; }
+
+.mh-summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.mh-summary-card { display: grid; gap: 4px; padding: 18px; border: 1px solid #bce9df; border-radius: 14px; background: #f0fdfa; }
+.mh-summary-card span { color: #0f766e; font-size: 12px; font-weight: 800; }
+.mh-summary-card strong { color: #134e4a; font-size: 28px; line-height: 1.1; }
+.mh-summary-card small { color: #64748b; font-size: 12px; }
+.mh-summary-card--warning { border-color: #fde68a; background: #fffbeb; }.mh-summary-card--warning span,.mh-summary-card--warning strong { color: #a16207; }
+.mh-summary-card--blue { border-color: #bfdbfe; background: #eff6ff; }.mh-summary-card--blue span,.mh-summary-card--blue strong { color: #1d4ed8; }
+.mh-summary-card--neutral { border-color: #e2e8f0; background: #f8fafc; }.mh-summary-card--neutral span,.mh-summary-card--neutral strong { color: #334155; }
+
 .mh-card {
   padding: 22px;
   border: 1px solid #e2e8f0;
@@ -454,6 +480,13 @@
   color: #64748b;
   font-size: 14px;
 }
+
+.mh-visit-filters { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 18px 0; }
+.mh-filter-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.mh-filter-pills button { min-height: 34px; padding: 0 12px; border: 1px solid #dbe3ed; border-radius: 999px; background: #fff; color: #475569; font-size: 12px; font-weight: 750; cursor: pointer; }
+.mh-filter-pills button.is-active { border-color: #0f766e; background: #0f766e; color: #fff; }
+.mh-visit-search { min-height: 38px; display: flex; align-items: center; gap: 8px; min-width: 230px; padding: 0 11px; border: 1px solid #dbe3ed; border-radius: 9px; color: #64748b; }
+.mh-visit-search input { width: 100%; border: 0; outline: 0; background: transparent; color: #0f172a; font-size: 12px; }
 
 .mh-visit-list {
   display: grid;
@@ -1095,6 +1128,8 @@
   .mh-grid {
     grid-template-columns: 1fr;
   }
+
+  .mh-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .mh-visit-detail-grid {
     grid-template-columns: 1fr;

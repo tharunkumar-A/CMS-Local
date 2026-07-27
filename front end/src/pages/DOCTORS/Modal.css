@@ -30,10 +30,10 @@
   right: 20px;
   width: 30px;
   height: 30px;
-  border: none;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  background: transparent;
-  color: #5b6472;
+  background: #ffffff;
+  color: #334155;
   display: inline-flex;
   align-items: center;
   justify-content: center;

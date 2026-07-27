@@ -154,11 +154,6 @@
   background: #f8fafc;
 }
 
-.branches-field textarea {
-  min-height: 90px;
-  resize: vertical;
-}
-
 .branches-success,
 .branches-error {
   margin: 0 0 12px;
@@ -469,7 +464,8 @@
 }
 
 .branches-field input,
-.branches-field select {
+.branches-field select,
+.branches-field textarea {
   width: 100%;
   height: 44px;
   border: 1px solid #cbd5e1;
@@ -478,20 +474,30 @@
   color: #0f172a;
   padding: 0 13px;
   font-size: 14px;
+  font-family: inherit;
+  line-height: 1.4;
   outline: none;
   box-sizing: border-box;
 }
 
 .branches-field input:focus,
-.branches-field select:focus {
+.branches-field select:focus,
+.branches-field textarea:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
 .branches-field input.is-invalid,
-.branches-field select.is-invalid {
+.branches-field select.is-invalid,
+.branches-field textarea.is-invalid {
   border-color: #dc2626;
   background: #fffafa;
+}
+
+.branches-field textarea {
+  min-height: 90px;
+  height: auto;
+  padding: 10px 13px;
 }
 
 .branches-field-error {

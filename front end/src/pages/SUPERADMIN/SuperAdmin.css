@@ -770,6 +770,26 @@
   line-height: 1.25;
 }
 
+.sa-password-requirements {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 0;
+  color: #64748b;
+  font-size: 12px;
+  list-style: none;
+}
+
+.sa-password-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sa-password-requirements li.met {
+  color: #15803d;
+}
+
 .sa-form-field textarea {
   min-height: 104px;
   padding-top: 10px;

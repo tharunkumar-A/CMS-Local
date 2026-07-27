@@ -419,6 +419,7 @@ function AddDoctor() {
   const hospitalId = getStoredHospitalId();
   const clinicName = getClinicDisplayName({}, "Clinic");
   const imageInputRef = useRef(null);
+  const hasUnsavedChanges = useRef(false);
 
   const [form, setForm] = useState({
     branchId: "",
@@ -615,6 +616,7 @@ function AddDoctor() {
       }
     }
 
+    hasUnsavedChanges.current = true;
     setForm((previous) => ({
       ...previous,
       [name]: value,
@@ -644,6 +646,7 @@ function AddDoctor() {
       URL.revokeObjectURL(imagePreview);
     }
 
+    hasUnsavedChanges.current = true;
     setImageFile(nextFile);
     setImagePreview(URL.createObjectURL(nextFile));
     setFieldErrors((previous) => ({ ...previous, image: "" }));
@@ -797,6 +800,17 @@ if (imageFile) {
     }
   };
 
+  const handleClose = () => {
+    if (
+      hasUnsavedChanges.current &&
+      !window.confirm("You have unsaved changes. Close this form and discard them?")
+    ) {
+      return;
+    }
+
+    navigate("/doctors");
+  };
+
   return (
     <div className="add-doctor-page">
       <div className="add-doctor-card">
@@ -804,7 +818,8 @@ if (imageFile) {
           className="add-doctor-close-button"
           type="button"
           aria-label="Close add doctor form"
-          onClick={() => navigate("/doctors")}
+          title="Close"
+          onClick={handleClose}
           disabled={saving}
         >
           <X size={22} strokeWidth={2} />

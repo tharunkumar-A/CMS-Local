@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import {
-  Bell, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, ClipboardList,
+  Bell, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, ClipboardList, Clock,
   CreditCard, Download, Eye, EyeOff, FileText, Heart, KeyRound, LogOut, Mail, MapPin, Pill,
   Menu, Phone, Search, Share2, Trash2, UserRound, X,
 } from "lucide-react";
@@ -694,6 +694,15 @@ function PatientAppointmentsPage({ visits = [], onRefresh }) {
     }
   };
 
+  const upcomingAppointment = useMemo(
+    () =>
+      rows.find((visit) => {
+        const status = String(getAppointmentStatus(visit)).toLowerCase();
+        return !["cancelled", "completed"].includes(status);
+      }) || null,
+    [rows]
+  );
+
   return (
     <PatientPageShell
       title="Appointments"
@@ -709,17 +718,42 @@ function PatientAppointmentsPage({ visits = [], onRefresh }) {
         </div>
       }
     >
-      <div className="pd-card">
-        <div className="pd-section-header">
+      <div className="pp-appointments-layout">
+        <section className="pp-appointment-summary">
           <div>
-            <h2>Appointment history</h2>
-            <p>Linked to the patient portal backend data.</p>
+            <span className="pp-appointment-eyebrow">UPCOMING APPOINTMENT</span>
+            {upcomingAppointment ? (
+              <>
+                <h2>{getAppointmentDoctor(upcomingAppointment)}</h2>
+                <p>{getAppointmentClinic(upcomingAppointment)}</p>
+                <div className="pp-appointment-summary-meta">
+                  <span><Calendar size={16} aria-hidden="true" />{formatPatientDate(getAppointmentDate(upcomingAppointment)) || "Date to be confirmed"}</span>
+                  <span><Clock size={16} aria-hidden="true" />{getAppointmentTime(upcomingAppointment) || "Time to be confirmed"}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>No upcoming appointment</h2>
+                <p>Book a visit with your care team when you are ready.</p>
+              </>
+            )}
           </div>
-          {/* Book button moved to header actions */}
-        </div>
+          <button type="button" className="pp-book-appointment-btn" onClick={() => navigate("/patient/appointments/book")}>
+            <Calendar size={18} aria-hidden="true" /> Book Appointment
+          </button>
+        </section>
 
-        {rows.length ? (
-          <div className="pd-notification-list">
+        <section className="pp-appointment-list-section">
+          <div className="pd-section-header">
+            <div>
+              <h2>Your appointments</h2>
+              <p>Select an appointment to view or manage its details.</p>
+            </div>
+            <span className="pp-appointment-count">{rows.length} {rows.length === 1 ? "appointment" : "appointments"}</span>
+          </div>
+
+          {rows.length ? (
+          <div className="pp-appointment-card-list">
             {rows.map((visit, index) => {
               const appointmentKey = visit.appointmentId || visit.id || index;
               const isSelected =
@@ -729,7 +763,7 @@ function PatientAppointmentsPage({ visits = [], onRefresh }) {
               return (
                 <button
                   type="button"
-                  className={`pd-notification-item ${isSelected ? "is-active" : ""}`}
+                  className={`pp-appointment-card ${isSelected ? "is-active" : ""}`}
                   key={appointmentKey}
                   onClick={() => {
                     setSelectedAppointment(visit);
@@ -737,33 +771,37 @@ function PatientAppointmentsPage({ visits = [], onRefresh }) {
                     setRescheduling(false);
                   }}
                 >
-                  <span className="pd-notification-dot" />
-                  <span className="pd-notification-body">
-                    <strong>{getAppointmentNumber(visit) || "Appointment"}</strong>
-                    <span>
-                      {getAppointmentDoctor(visit)} at {getAppointmentClinic(visit)}
-                    </span>
-                    <em>
-                      {formatPatientDate(getAppointmentDate(visit)) || "Date not available"}
-                      {getAppointmentTime(visit) ? `, ${getAppointmentTime(visit)}` : ""} - {getAppointmentStatus(visit)}
-                    </em>
+                  <span className="pp-appointment-date-block">
+                    <strong>{formatPatientDate(getAppointmentDate(visit)) || "Date"}</strong>
+                    <small>{getAppointmentTime(visit) || "Time TBD"}</small>
                   </span>
-                  <ChevronRight size={16} className="pd-notification-chevron" />
+                  <span className="pp-appointment-card-content">
+                    <span className="pp-appointment-card-topline">
+                      <strong>{getAppointmentDoctor(visit)}</strong>
+                      <span className={`pp-appointment-status pp-appointment-status--${String(getAppointmentStatus(visit)).toLowerCase().replace(/[^a-z]+/g, "-")}`}>{getAppointmentStatus(visit)}</span>
+                    </span>
+                    <span>{getAppointmentClinic(visit)}</span>
+                    <small>{getAppointmentReason(visit)}</small>
+                  </span>
+                  <ChevronRight size={18} aria-hidden="true" />
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="pd-selected-notification">
-            <p>No appointments found yet.</p>
+          <div className="pp-appointment-empty-state">
+            <Calendar size={24} aria-hidden="true" />
+            <div><strong>No appointments found yet</strong><p>Book your first appointment to see it here.</p></div>
+            <button type="button" className="pd-action-btn pd-action-btn--primary" onClick={() => navigate("/patient/appointments/book")}>Book now</button>
           </div>
         )}
+        </section>
 
         {selectedAppointment ? (
-          <div className="pd-selected-notification">
+          <section className="pp-appointment-details pd-selected-notification">
             <div className="pd-selected-notification-head">
-              <strong>{getAppointmentNumber(selectedAppointment) || "Appointment details"}</strong>
-              <span>{getAppointmentStatus(selectedAppointment)}</span>
+              <div><span className="pp-appointment-eyebrow">APPOINTMENT DETAILS</span><strong>{getAppointmentNumber(selectedAppointment) || "Appointment details"}</strong></div>
+              <span className={`pp-appointment-status pp-appointment-status--${String(getAppointmentStatus(selectedAppointment)).toLowerCase().replace(/[^a-z]+/g, "-")}`}>{getAppointmentStatus(selectedAppointment)}</span>
             </div>
             <div className="pd-appointment-detail-grid">
               <div>
@@ -904,8 +942,14 @@ function PatientAppointmentsPage({ visits = [], onRefresh }) {
                 </div>
               </div>
             )}
-          </div>
+          </section>
         ) : null}
+
+        <aside className="pp-appointment-help">
+          <div className="pp-appointment-help-icon"><Phone size={20} aria-hidden="true" /></div>
+          <div><h3>Need help with an appointment?</h3><p>Contact your clinic for booking support, changes, or urgent questions.</p></div>
+          <a href="tel:+910000000000" className="pd-action-btn">Contact clinic</a>
+        </aside>
       </div>
     </PatientPageShell>
   );
@@ -1609,6 +1653,8 @@ function PatientMedicalHistoryPage({ patient, visits = [], prescriptions = [] })
   const [history, setHistory] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [visitFilter, setVisitFilter] = useState("all");
+  const [visitSearch, setVisitSearch] = useState("");
 
   const patientId = String(
     patient?.id ||
@@ -1775,6 +1821,42 @@ function PatientMedicalHistoryPage({ patient, visits = [], prescriptions = [] })
     sortedReports.length ||
     sortedPrescriptions.length;
 
+  const filteredVisitRecords = useMemo(() => {
+    const query = visitSearch.trim().toLowerCase();
+    return visitRecords.filter((visit) => {
+      const visitDate = String(readVisitDate(visit));
+      const matchesFilter = visitFilter === "all" || visitDate.includes(visitFilter);
+      const matchesSearch = !query || [
+        readVisitDoctor(visit),
+        readVisitDepartment(visit),
+        readVisitDiagnosis(visit),
+        readVisitChiefComplaint(visit),
+      ].some((value) => String(value).toLowerCase().includes(query));
+      return matchesFilter && matchesSearch;
+    });
+  }, [visitFilter, visitRecords, visitSearch]);
+
+  const downloadMedicalSummary = () => {
+    const summary = [
+      "Medical Summary",
+      `Patient: ${patient?.name || patient?.fullName || "Patient"}`,
+      `Generated: ${new Date().toLocaleDateString()}`,
+      "",
+      `Medical conditions: ${medicalConditions.join(", ") || "Not recorded"}`,
+      `Allergies: ${allergies.join(", ") || "Not recorded"}`,
+      `Chronic diseases: ${chronicConditions.join(", ") || "Not recorded"}`,
+      `Current medications: ${currentMedications.join(", ") || "Not recorded"}`,
+      "",
+      "Previous visits:",
+      ...visitRecords.map((visit) => `${readVisitDate(visit)} — ${readVisitDoctor(visit)} — ${readVisitDiagnosis(visit)}`),
+    ].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([summary], { type: "text/plain" }));
+    link.download = "medical-summary.txt";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   return (
     <PatientPageShell
       title="Medical History"
@@ -1787,6 +1869,24 @@ function PatientMedicalHistoryPage({ patient, visits = [], prescriptions = [] })
           <p>No medical history has been recorded for this patient yet.</p>
         </div>
       ) : null}
+
+      <section className="mh-summary-header">
+        <div>
+          <span>YOUR HEALTH RECORD</span>
+          <h2>Medical summary</h2>
+          <p>An overview of the information shared with your care team.</p>
+        </div>
+        <button type="button" className="mh-download-button" onClick={downloadMedicalSummary} disabled={!hasAnyHistory}>
+          <Download size={17} aria-hidden="true" /> Download medical summary
+        </button>
+      </section>
+
+      <section className="mh-summary-cards" aria-label="Medical summary">
+        <div className="mh-summary-card"><span>Conditions</span><strong>{medicalConditions.length + chronicConditions.length}</strong><small>Recorded conditions</small></div>
+        <div className="mh-summary-card mh-summary-card--warning"><span>Allergies</span><strong>{allergies.length}</strong><small>Items recorded</small></div>
+        <div className="mh-summary-card mh-summary-card--blue"><span>Medications</span><strong>{currentMedications.length}</strong><small>Current medicines</small></div>
+        <div className="mh-summary-card mh-summary-card--neutral"><span>Previous visits</span><strong>{visitRecords.length}</strong><small>Care visits on record</small></div>
+      </section>
 
       <div className="mh-grid">
         <div className="mh-card">
@@ -1872,9 +1972,18 @@ function PatientMedicalHistoryPage({ patient, visits = [], prescriptions = [] })
             <p>Latest consultations and notes from your patient history.</p>
           </div>
         </div>
-        {visitRecords.length ? (
+        <div className="mh-visit-filters">
+          <div className="mh-filter-pills" role="group" aria-label="Filter visits by year">
+            <button type="button" className={visitFilter === "all" ? "is-active" : ""} onClick={() => setVisitFilter("all")}>All visits</button>
+            {[...new Set(visitRecords.map((visit) => String(readVisitDate(visit)).match(/\b\d{4}\b/)?.[0]).filter(Boolean))].slice(0, 3).map((year) => (
+              <button type="button" className={visitFilter === year ? "is-active" : ""} onClick={() => setVisitFilter(year)} key={year}>{year}</button>
+            ))}
+          </div>
+          <label className="mh-visit-search"><Search size={16} aria-hidden="true" /><input value={visitSearch} onChange={(event) => setVisitSearch(event.target.value)} placeholder="Search doctor or diagnosis" /></label>
+        </div>
+        {filteredVisitRecords.length ? (
           <div className="mh-visit-list">
-            {visitRecords.map((visit, index) => (
+            {filteredVisitRecords.map((visit, index) => (
               <div className="mh-visit-item" key={visit.id || visit.appointmentId || index}>
                 <div className="mh-visit-meta">
                   <span>{readVisitDate(visit)}</span>
@@ -1903,7 +2012,7 @@ function PatientMedicalHistoryPage({ patient, visits = [], prescriptions = [] })
           </div>
         ) : (
           <div className="mh-empty">
-            <p>No previous visits found.</p>
+            <p>{visitRecords.length ? "No visits match the selected filters." : "No previous visits found."}</p>
           </div>
         )}
       </div>

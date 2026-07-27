@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Eye, Pencil, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
+import { CheckCircle2, Circle, Eye, Pencil, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 import Header from "../../../components/superadmin/Header";
 import DataTable from "../../../components/superadmin/DataTable";
 import SearchFilter from "../../../components/superadmin/SearchFilter";
@@ -16,6 +16,7 @@ import {
   validateAlpha,
   validateMobile,
   validateGmail,
+  validateStrongPassword,
 } from "../../../utils/validation";
 import { formatTitleCase } from "../../../utils/format";
 
@@ -48,6 +49,14 @@ const FIELD_LABELS = {
   password: "Password",
 };
 
+const PASSWORD_REQUIREMENTS = [
+  { label: "Minimum 8 characters", test: (value) => value.length >= 8 },
+  { label: "At least 1 uppercase letter (A-Z)", test: (value) => /[A-Z]/.test(value) },
+  { label: "At least 1 lowercase letter (a-z)", test: (value) => /[a-z]/.test(value) },
+  { label: "At least 1 number (0-9)", test: (value) => /\d/.test(value) },
+  { label: "At least 1 special character (@, #, $, %, etc.)", test: (value) => /[^A-Za-z0-9]/.test(value) },
+];
+
 function Users() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
@@ -57,6 +66,7 @@ function Users() {
   const [editingUserId, setEditingUserId] = useState("");
   const [form, setForm] = useState(emptyUser);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -118,6 +128,7 @@ function Users() {
     setEditingUserId("");
     setForm(emptyUser);
     setFieldErrors({});
+    setIsPasswordFocused(false);
   };
 
   const handleChange = (event) => {
@@ -147,9 +158,11 @@ function Users() {
     const emailRequiredError = !form.email.trim()
       ? "Email is required."
       : "";
-    const passwordRequiredError = !editingUserId && !form.password
-      ? "Password is required."
-      : "";
+    const passwordError = !editingUserId
+      ? validateStrongPassword(form.password)
+      : form.password
+        ? validateStrongPassword(form.password, "Password", { required: false })
+        : "";
     const emailError = emailRequiredError || validateGmail(form.email, "Email");
     const mobileError = form.mobileNumber
       ? validateMobile(form.mobileNumber, "Mobile number")
@@ -159,7 +172,7 @@ function Users() {
       ...(nameError ? { name: nameError } : {}),
       ...(emailError ? { email: emailError } : {}),
       ...(mobileError ? { mobileNumber: mobileError } : {}),
-      ...(passwordRequiredError ? { password: passwordRequiredError } : {}),
+      ...(passwordError ? { password: passwordError } : {}),
     };
 
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -540,12 +553,26 @@ function Users() {
                     type="password"
                     value={form.password}
                     onChange={handleChange}
+                    onFocus={() => setIsPasswordFocused(true)}
                     autoComplete="new-password"
                     required={!editingUserId}
                     className={fieldErrors.password ? "is-invalid" : ""}
                   />
                   {fieldErrors.password ? (
                     <span className="sa-field-error">{fieldErrors.password}</span>
+                  ) : null}
+                  {isPasswordFocused ? (
+                    <ul className="sa-password-requirements" aria-label="Password requirements">
+                      {PASSWORD_REQUIREMENTS.map((requirement) => {
+                        const met = requirement.test(form.password);
+                        return (
+                          <li className={met ? "met" : ""} key={requirement.label}>
+                            {met ? <CheckCircle2 size={14} aria-hidden="true" /> : <Circle size={14} aria-hidden="true" />}
+                            <span>{requirement.label}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   ) : null}
                 </div>
               </div>
