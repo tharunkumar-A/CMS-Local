@@ -19,6 +19,7 @@ import {
   validateStrongPassword,
 } from "../../../utils/validation";
 import { formatTitleCase } from "../../../utils/format";
+import { validateUniqueMobileNumber } from "../../../utils/mobileUniqueness";
 
 const emptyUser = {
   name: "",
@@ -194,6 +195,21 @@ function Users() {
     setError("");
 
     try {
+      const duplicateMobileMessage = await validateUniqueMobileNumber(
+        form.mobileNumber || form.phone,
+        {
+          current: editingUserId ? { id: editingUserId, source: "users" } : {},
+          localRecords: users,
+          localSource: "users",
+        }
+      );
+      if (duplicateMobileMessage) {
+        setFieldErrors({ mobileNumber: duplicateMobileMessage });
+        setError(duplicateMobileMessage);
+        setSaving(false);
+        return;
+      }
+
       await saveUser(form, editingUserId || undefined);
       closeForm();
       await loadUsers();

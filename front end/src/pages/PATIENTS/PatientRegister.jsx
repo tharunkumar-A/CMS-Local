@@ -8,6 +8,7 @@ import { INDIA_COUNTRY } from "../../utils/indianLocations";
 import { fetchPincodeLocation } from "../../utils/pincodeLocation";
 import { formatTitleCase } from "../../utils/format";
 import { validateStrongPassword, validateEmail, validateName, validateText } from "../../utils/validation";
+import { validateUniqueMobileNumber } from "../../utils/mobileUniqueness";
 import { ChevronRight, ChevronLeft, Check, Heart } from "lucide-react";
 import clinicBg from '../../assests/clinic-bg.jpg';
 import "../../Login/styles/Auth.css";
@@ -123,9 +124,6 @@ function PatientRegister() {
           const list = Array.isArray(data) ? data : (data.items || data.data || []);
           if (!mounted) return;
           setClinics(list || []);
-          if (list.length > 0) {
-            setForm((current) => ({ ...current, hospitalId: String(list[0].id || list[0].hospitalId || "") }));
-          }
         } else {
           if (mounted) setClinics([]);
         }
@@ -408,6 +406,17 @@ function PatientRegister() {
     };
 
     try {
+      const duplicateMobileMessage = await validateUniqueMobileNumber(payload.mobileNumber, {
+        localSource: "Patient",
+      });
+      if (duplicateMobileMessage) {
+        setErrors({ mobile: duplicateMobileMessage });
+        toast.error(duplicateMobileMessage);
+        setIsSubmitting(false);
+        setCurrentStep(2);
+        return;
+      }
+
       const response = await fetch(REGISTER_API, {
         method: "POST",
         headers: {
@@ -448,7 +457,7 @@ function PatientRegister() {
       />
       <div className="auth-veil" aria-hidden="true" />
 
-      <div className={`auth-card auth-card--wide`}>
+      <div className={`auth-card auth-card--compact-register`}>
         {/* <div className="auth-logo" aria-hidden="true">
           <Heart size={20} />
         </div> */}
@@ -463,10 +472,16 @@ function PatientRegister() {
               <div className="form-group">
                 <label htmlFor="reg-clinic">Select Clinic/Hospital</label>
                 <select id="reg-clinic" name="hospitalId" value={form.hospitalId} onChange={handleChange} disabled={loadingClinics}>
-                  {loadingClinics ? <option value="">Loading clinics...</option> : null}
-                  {clinics.map((clinic) => (
-                    <option key={clinic.id || clinic.hospitalId} value={clinic.id || clinic.hospitalId}>{clinic.name || clinic.clinicName || 'Clinic'}</option>
-                  ))}
+                  {loadingClinics ? (
+                    <option value="">Loading clinics...</option>
+                  ) : (
+                    <>
+                      <option value="">Select Clinic</option>
+                      {clinics.map((clinic) => (
+                        <option key={clinic.id || clinic.hospitalId} value={clinic.id || clinic.hospitalId}>{clinic.name || clinic.clinicName || 'Clinic'}</option>
+                      ))}
+                    </>
+                  )}
                 </select>
                 {errors.hospitalId && <span className="error-message">{errors.hospitalId}</span>}
               </div>
@@ -494,7 +509,7 @@ function PatientRegister() {
                 </div>
                 <div className="form-group">
                   <label htmlFor="reg-dob">DOB</label>
-                  <input id="reg-dob" type="date" name="dob" value={form.dob} onChange={handleChange} placeholder="DD/MM/YYYY" />
+                  <input id="reg-dob" type="date" name="dob" value={form.dob} onChange={handleChange} placeholder="dd-mm-yyyy" />
                   {errors.dob && <span className="error-message">{errors.dob}</span>}
                 </div>
               </div>
