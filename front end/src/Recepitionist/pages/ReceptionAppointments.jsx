@@ -17,6 +17,7 @@ import {
   hasDuplicateAppointmentForPatientDoctorDate,
 } from "../../utils/appointmentDuplicateValidation";
 import { getSpecializationDisplayName } from "../../pages/DOCTORS/doctorExpertiseOptions";
+import OPSlip from "../../components/OPSlip";
 
 const parseSlotLabel = (slot) => {
   if (!slot) return "";
@@ -406,6 +407,139 @@ const appendUnit = (value, unit) => {
   return text ? `${text} ${unit}` : "";
 };
 
+const firstValue = (...values) =>
+  values.find(
+    (value) =>
+      value !== undefined && value !== null && String(value).trim() !== ""
+  ) ?? "";
+
+const getBookingRecord = (response) => {
+  if (!response || typeof response !== "object" || Array.isArray(response)) return {};
+
+  return (
+    response.appointment ||
+    response.data?.appointment ||
+    response.result?.appointment ||
+    response.data ||
+    response.result ||
+    response
+  );
+};
+
+const hasPatientSlipDetails = (patient = {}) =>
+  Boolean(
+    firstValue(patient.name, patient.fullName, patient.patientName)
+  ) &&
+  Boolean(firstValue(patient.age, patient.Age)) &&
+  Boolean(
+    firstValue(
+      patient.phone,
+      patient.Phone,
+      patient.phoneNumber,
+      patient.PhoneNumber
+    )
+  );
+
+const mapAppointmentToOPSlip = ({
+  bookingResponse,
+  bookingPayload,
+  patient,
+  doctor,
+  receptionist,
+}) => {
+  const record = getBookingRecord(bookingResponse);
+  const patientData = record.patient || record.Patient || patient || {};
+  const consultationNumber = firstValue(
+    record.consultNo,
+    record.consultationNo,
+    record.appointmentNo,
+    record.appointmentId,
+    record.id,
+    bookingPayload.transactionId
+  );
+
+  return {
+    clinicName: firstValue(
+      receptionist.hospitalName,
+      receptionist.branchName,
+      "Clinic"
+    ),
+    clinicAddress: firstValue(record.clinicAddress, record.hospitalAddress),
+    clinicPhone: firstValue(record.clinicPhone, record.hospitalPhone),
+    regNo: firstValue(record.regNo, record.registrationNo),
+    patientName: firstValue(
+      record.patientName,
+      patientData.name,
+      patientData.fullName,
+      patientData.patientName
+    ),
+    umrNo: firstValue(
+      record.umrNo,
+      record.UMRNo,
+      patientData.umrNo,
+      patientData.UMRNo,
+      bookingPayload.patientId
+    ),
+    age: firstValue(record.age, patientData.age),
+    sex: firstValue(
+      record.sex,
+      record.gender,
+      patientData.gender,
+      patientData.sex
+    ),
+    phone: firstValue(
+      record.phone,
+      record.patientPhone,
+      patientData.phone,
+      patientData.Phone,
+      patientData.phoneNumber
+    ),
+    address: firstValue(record.address, patientData.address, patientData.Address),
+    consultNo: consultationNumber,
+    consultDate: firstValue(
+      record.appointmentDate,
+      record.date,
+      bookingPayload.appointmentDate
+    ),
+    consultant: firstValue(
+      record.doctorName,
+      doctor?.doctorName,
+      doctor?.name,
+      bookingPayload.doctorName
+    ),
+    refBy: firstValue(record.refBy, record.referredBy, "Self"),
+    department: firstValue(
+      record.department,
+      doctor?.department,
+      doctor?.specialization && getSpecializationDisplayName(doctor.specialization),
+      "General"
+    ),
+    visitType: firstValue(record.visitType, "Normal"),
+    payMode: firstValue(record.paymentMode, bookingPayload.paymentMode, "Self"),
+    opNo: firstValue(record.opNo, record.OPNo, record.appointmentId, record.id),
+    receiptNo: firstValue(
+      record.receiptNo,
+      record.receiptNumber,
+      record.transactionId,
+      bookingPayload.transactionId
+    ),
+    consultFee: firstValue(
+      record.paidAmount,
+      record.consultFee,
+      bookingPayload.paidAmount
+    ),
+    cashAmt: firstValue(record.paidAmount, bookingPayload.paidAmount, 0),
+    dueAmt: firstValue(record.dueAmount, record.dueAmt, 0),
+    validityNote: firstValue(record.validityNote),
+    createdBy: firstValue(record.createdBy, receptionist.name),
+    createDt: firstValue(
+      record.createdAt,
+      record.createDt,
+      new Date().toLocaleString()
+    ),
+  };
+};
+
 function ReceptionAppointments() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -435,6 +569,7 @@ function ReceptionAppointments() {
   const [paymentStep, setPaymentStep] = useState(false);
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [opSlipAppointment, setOPSlipAppointment] = useState(null);
   const [form, setForm] = useState({
     patientId: "",
     doctorId: "",
@@ -810,7 +945,39 @@ function ReceptionAppointments() {
     try {
       setBookingLoading(true);
       console.debug("Booking payload", { selectedDoctor, branchIdForAppointment, body });
-      await requestJson("Appointment", { method: "POST", body: JSON.stringify(body) });
+      const bookingResponse = await requestJson("Appointment", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const bookingRecord = getBookingRecord(bookingResponse);
+      const responsePatient = bookingRecord.patient || bookingRecord.Patient || {};
+      const responsePatientId = getAppointmentPatientId(bookingRecord) || form.patientId;
+      let slipPatient = responsePatient;
+
+      if (!hasPatientSlipDetails(responsePatient) && responsePatientId) {
+        try {
+          const patientData = await requestJson("Patient");
+          slipPatient =
+            parseList(patientData).find(
+              (patient) =>
+                String(getPatientId(patient)) === String(responsePatientId)
+            ) ||
+            selectedPatient ||
+            responsePatient;
+        } catch {
+          slipPatient = selectedPatient || responsePatient;
+        }
+      }
+
+      setOPSlipAppointment(
+        mapAppointmentToOPSlip({
+          bookingResponse,
+          bookingPayload: body,
+          patient: slipPatient || selectedPatient,
+          doctor: selectedDoctor,
+          receptionist: receptionistProfile,
+        })
+      );
       setMessage("Payment received. Appointment booked successfully.");
       toast.success("Payment received. Appointment booked successfully");
       setSelectedSlot("");
@@ -878,6 +1045,12 @@ function ReceptionAppointments() {
 
   return (
     <section className="rc-page">
+      {opSlipAppointment ? (
+        <OPSlip
+          appointment={opSlipAppointment}
+          onClose={() => setOPSlipAppointment(null)}
+        />
+      ) : null}
       <div className="rc-page-head">
         <div>
           <h2>Appointment Booking</h2>
